@@ -2,3 +2,8 @@
 !.git*
 /_*
 *.out
+examples/*.html
+examples/*.png
+examples/*.svg
+__pycache__/
+*.pyc
