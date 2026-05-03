@@ -150,7 +150,7 @@ def main() -> None:
         chart,
         chart_strain_field="strain",
         tree_strain_field="name",
-        tree_width=140,
+        tree_size=140,
     )
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)

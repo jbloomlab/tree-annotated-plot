@@ -30,10 +30,10 @@ def plot(
     *,
     chart_strain_field: str,
     tree_strain_field: str,
-    tree_width: int = 100,
+    tree_size: int = 100,
     prune_tree_to_chart: bool = False,
     strict_version: bool = True,
-) -> alt.HConcatChart:
+) -> alt.HConcatChart | alt.VConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`.
 
     The chart's strain-axis sort is overridden to match the tree's tip order
@@ -60,8 +60,13 @@ def plot(
         field; any other value `X` selects `node_attrs[X]` (auto-unwrapping
         the Auspice `{"value": ...}` convention). Dotted paths are not
         accepted.
-    tree_width
-        Width in pixels of the tree panel.
+    tree_size
+        Size in pixels of the tree's branch axis (the dimension perpendicular
+        to the strain rows). For vertical layout (chart strain on `y` → tree
+        on the left) this is the tree panel's *width*; for horizontal layout
+        (chart strain on `x` → tree on top) this is the tree panel's
+        *height*. The tree's tip-axis dimension is computed from the chart's
+        strain dimension so tips align row-for-row with chart rows.
     prune_tree_to_chart
         When False (default), tree tips not present in the chart's strain
         set are a fatal error. When True, those tips (and any internal
@@ -79,10 +84,12 @@ def plot(
 
     Returns
     -------
-    altair.HConcatChart
-        Tree on the left, user's chart on the right (vertical strain layout).
-        Horizontal layout (strain on x → tree on top) is added in a later
-        phase.
+    altair.HConcatChart | altair.VConcatChart
+        For vertical layout (chart strain on `y`), an `HConcatChart` with
+        the tree on the left and the user's chart on the right. For
+        horizontal layout (chart strain on `x`), a `VConcatChart` with the
+        tree on top and the chart below. The orientation is fully derived
+        from which axis carries `chart_strain_field`.
     """
     root = _ensure_tree(tree, tree_strain_field, strict_version=strict_version)
     tip_list = _tree.layout(root)
@@ -95,14 +102,6 @@ def plot(
 
     axis_hits = _find_strain_encoding(spec, chart_strain_field)
     axis = axis_hits[0][2]
-
-    if axis != "y":
-        raise NotImplementedError(
-            f"chart_strain_field={chart_strain_field!r} is encoded on the "
-            f"{axis!r} channel; only 'y' (vertical strain layout, tree on the "
-            "left) is supported in this version. Horizontal layout (strain on "
-            "x → tree on top) is coming in a later phase."
-        )
 
     chart_strains = _extract_chart_strains(spec, axis_hits, chart_strain_field)
 
@@ -121,19 +120,30 @@ def plot(
         tip_list = _tree.layout(root)
         tip_names = [t.name for t in tip_list]
 
-    height = _coerce_dim(
+    strain_dim = _coerce_dim(
         _chart_strain_dim(spec, axis_hits, axis), n_tips=len(tip_names)
     )
     tree_chart = _build_tree_chart(
-        root, n_tips=len(tip_names), width=tree_width, height=height
+        root,
+        n_tips=len(tip_names),
+        tree_size=tree_size,
+        strain_dim=strain_dim,
+        strain_axis=axis,
     )
 
     new_chart = _apply_tree_order_to_chart_object(chart, chart_strain_field, tip_names)
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
-    combined = alt.hconcat(tree_chart, new_chart, spacing=0).resolve_scale(
-        y="independent"
-    )
+    if axis == "y":
+        # Vertical: tree on the left, chart on the right.
+        combined = alt.hconcat(tree_chart, new_chart, spacing=0).resolve_scale(
+            y="independent"
+        )
+    else:
+        # Horizontal: tree on top, chart below.
+        combined = alt.vconcat(tree_chart, new_chart, spacing=0).resolve_scale(
+            x="independent"
+        )
     _apply_combined_config(combined, hoisted_config)
     for k, v in hoisted_other.items():
         combined._kwds[k] = v
@@ -911,42 +921,93 @@ def _build_tree_chart(
     root: _tree.TreeNode,
     *,
     n_tips: int,
-    width: int,
-    height: int | float | alt.Step,
+    tree_size: int,
+    strain_dim: int | float | alt.Step,
+    strain_axis: str,
 ) -> alt.Chart:
+    """Build the tree panel.
+
+    `_tree.segments(root)` returns a dataframe with columns x, x2 (branch-axis
+    values from the root's div) and y, y2 (tip-axis index). For each layout
+    we bind those columns to chart x or chart y differently:
+
+    - `strain_axis="y"` (vertical, hconcat). Tree on the left of the chart.
+      Branch axis on chart x, growing rightward (root on the left). Tip
+      axis on chart y, growing *downward* (so tip 0 is at the top, matching
+      the chart's strain order). Tree size = `tree_size` px wide;
+      tip-axis dim = `strain_dim` (matches chart's strain-axis height).
+    - `strain_axis="x"` (horizontal, vconcat). Tree on top of the chart.
+      Branch axis on chart y, growing *downward* (root on top, tips at
+      bottom). Tip axis on chart x, growing rightward (tip 0 on the left,
+      matching the chart's strain order). Tree size = `tree_size` px tall;
+      tip-axis dim = `strain_dim` (matches chart's strain-axis width).
+    """
     seg_df = _tree.segments(root)
     tips_df = pd.DataFrame(
         [{"name": t.name, "x": t.x, "y": t.y} for t in _tree.tips(root)]
     )
-    x_max = tips_df["x"].max()
-    leader_df = tips_df[tips_df["x"] < x_max].assign(x2=x_max)
+    branch_max = float(seg_df[["x", "x2"]].max().max())
+    branch_min = float(seg_df[["x", "x2"]].min().min())
+    leader_df = tips_df[tips_df["x"] < branch_max].assign(x2=branch_max)
 
-    x_min_seg = float(seg_df[["x", "x2"]].min().min())
-    x_max_seg = float(seg_df[["x", "x2"]].max().max())
-    x_scale = alt.Scale(domain=[x_min_seg, x_max_seg], nice=False, zero=False)
-    y_scale = alt.Scale(domain=[n_tips - 0.5, -0.5], nice=False, zero=False)
-    y_enc = alt.Y("y:Q", axis=None, scale=y_scale)
-    x_enc = alt.X("x:Q", axis=None, scale=x_scale)
+    if strain_axis == "y":
+        # Vertical: branch axis grows rightward; tip axis with tip 0 on top.
+        branch_scale = alt.Scale(
+            domain=[branch_min, branch_max], nice=False, zero=False
+        )
+        tip_scale = alt.Scale(domain=[n_tips - 0.5, -0.5], nice=False, zero=False)
+        branch_enc = alt.X("x:Q", axis=None, scale=branch_scale)
+        tip_enc = alt.Y("y:Q", axis=None, scale=tip_scale)
+        leaders = (
+            alt.Chart(leader_df)
+            .mark_rule(stroke="#888", strokeWidth=1.0, strokeDash=[2, 2])
+            .encode(x=branch_enc, x2="x2:Q", y=tip_enc)
+        )
+        branches = (
+            alt.Chart(seg_df)
+            .mark_rule(strokeWidth=1.5)
+            .encode(x=branch_enc, x2="x2:Q", y=tip_enc, y2="y2:Q")
+        )
+        tip_marks = (
+            alt.Chart(tips_df)
+            .mark_circle(size=28, color="black")
+            .encode(x=branch_enc, y=tip_enc)
+        )
+        layered = leaders + branches + tip_marks
+        layered = layered.properties(width=tree_size, height=strain_dim)
+    elif strain_axis == "x":
+        # Horizontal: branch axis grows downward (root on top); tip axis
+        # with tip 0 on the left.
+        branch_scale = alt.Scale(
+            domain=[branch_max, branch_min], nice=False, zero=False
+        )
+        tip_scale = alt.Scale(domain=[-0.5, n_tips - 0.5], nice=False, zero=False)
+        branch_enc = alt.Y("x:Q", axis=None, scale=branch_scale)
+        tip_enc = alt.X("y:Q", axis=None, scale=tip_scale)
+        leaders = (
+            alt.Chart(leader_df)
+            .mark_rule(stroke="#888", strokeWidth=1.0, strokeDash=[2, 2])
+            .encode(y=branch_enc, y2="x2:Q", x=tip_enc)
+        )
+        branches = (
+            alt.Chart(seg_df)
+            .mark_rule(strokeWidth=1.5)
+            .encode(y=branch_enc, y2="x2:Q", x=tip_enc, x2="y2:Q")
+        )
+        tip_marks = (
+            alt.Chart(tips_df)
+            .mark_circle(size=28, color="black")
+            .encode(y=branch_enc, x=tip_enc)
+        )
+        layered = leaders + branches + tip_marks
+        layered = layered.properties(width=strain_dim, height=tree_size)
+    else:
+        raise ValueError(f"strain_axis must be 'x' or 'y', got {strain_axis!r}")
 
-    leaders = (
-        alt.Chart(leader_df)
-        .mark_rule(stroke="#888", strokeWidth=1.0, strokeDash=[2, 2])
-        .encode(x=x_enc, x2="x2:Q", y=y_enc)
-    )
-    branches = (
-        alt.Chart(seg_df)
-        .mark_rule(strokeWidth=1.5)
-        .encode(x=x_enc, x2="x2:Q", y=y_enc, y2="y2:Q")
-    )
-    tip_marks = (
-        alt.Chart(tips_df).mark_circle(size=28, color="black").encode(x=x_enc, y=y_enc)
-    )
-
-    tree_chart = (leaders + branches + tip_marks).properties(width=width, height=height)
     # Suppress the panel border on the tree itself. This is a panel-level
     # Vega-Lite `view` property, which overrides any inherited
     # `config.view.stroke` (e.g. if the user's chart was built with
     # `.configure_view(stroke="black")`, that stroke applies to the chart
     # panel but not to the tree).
-    tree_chart._kwds["view"] = alt.ViewBackground(stroke=None)
-    return tree_chart
+    layered._kwds["view"] = alt.ViewBackground(stroke=None)
+    return layered
