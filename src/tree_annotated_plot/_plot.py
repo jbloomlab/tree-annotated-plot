@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import warnings
 from html.parser import HTMLParser
@@ -33,8 +34,11 @@ def plot(
     *,
     chart_strain_field: str,
     tree_strain_field: str,
+    branch_length: Literal["div", "num_date"] = "div",
     tree_size: int = 100,
     tree_location: TreeLocation | None = None,
+    scale_bar: bool = False,
+    branch_length_units: str | None = None,
     prune_tree_to_chart: bool = False,
     strict_version: bool = True,
 ) -> alt.HConcatChart | alt.VConcatChart:
@@ -64,6 +68,10 @@ def plot(
         field; any other value `X` selects `node_attrs[X]` (auto-unwrapping
         the Auspice `{"value": ...}` convention). Dotted paths are not
         accepted.
+    branch_length
+        Which Auspice node attribute supplies branch lengths. `"div"`
+        (default) reads `node_attrs.div`. `"num_date"` reads
+        `node_attrs.num_date.value`.
     tree_size
         Size in pixels of the tree's branch axis (the dimension perpendicular
         to the strain rows). For vertical layout (chart strain on `y`) this
@@ -87,6 +95,20 @@ def plot(
         with the labels. Specifying `"top"`/`"bottom"` for a y-encoded
         strain (or `"left"`/`"right"` for an x-encoded strain) raises
         `ValueError`.
+    scale_bar
+        Off by default. When True, adds a small bar in the tree panel
+        whose length corresponds to a "nice" number (largest value among
+        1/2/5 × 10^k that is ≤ 25% of the branch range). Sits at the tail
+        end of the tip axis, in extra pixel space added past the tree
+        body so tip-row alignment with the chart is preserved.
+    branch_length_units
+        Used only when `scale_bar=True` and `branch_length="div"`: the
+        unit string pasted after the bar's numeric length (e.g.
+        `"substitutions/site"` → `"0.01 substitutions/site"`). `None`
+        renders unitless. We do not auto-detect divergence units —
+        Auspice has no formal field for them and magnitude heuristics
+        misclassify silently. For `branch_length="num_date"` the label
+        is always in `years`/`months` and this argument is ignored.
     prune_tree_to_chart
         When False (default), tree tips not present in the chart's strain
         set are a fatal error. When True, those tips (and any internal
@@ -111,7 +133,12 @@ def plot(
         tree on top and the chart below. The orientation is fully derived
         from which axis carries `chart_strain_field`.
     """
-    root = _ensure_tree(tree, tree_strain_field, strict_version=strict_version)
+    root = _ensure_tree(
+        tree,
+        tree_strain_field,
+        branch_length=branch_length,
+        strict_version=strict_version,
+    )
     tip_list = _tree.layout(root)
     tip_names = [t.name for t in tip_list]
 
@@ -152,6 +179,9 @@ def plot(
         strain_dim=strain_dim,
         strain_axis=axis,
         tree_location=location,
+        scale_bar=scale_bar,
+        branch_length=branch_length,
+        branch_length_units=branch_length_units,
     )
 
     new_chart = _apply_tree_order_to_chart_object(chart, chart_strain_field, tip_names)
@@ -222,6 +252,7 @@ def _ensure_tree(
     tree: str | Path | dict | _tree.TreeNode,
     tree_strain_field: str,
     *,
+    branch_length: str,
     strict_version: bool,
 ) -> _tree.TreeNode:
     if isinstance(tree, _tree.TreeNode):
@@ -229,6 +260,7 @@ def _ensure_tree(
     return _tree.load_auspice(
         tree,
         tree_strain_field=tree_strain_field,
+        branch_length=branch_length,
         strict_version=strict_version,
     )
 
@@ -985,6 +1017,99 @@ def _coerce_dim(v: int | float | dict, *, n_tips: int) -> int | float:
 # ---------- tree panel construction (unchanged from Phase 1) ----------
 
 
+_SCALE_BAR_EXTRA_PIXELS = 35
+
+
+def _nice_scale_bar_length(branch_range: float) -> float:
+    """Return the largest 1/2/5 × 10^k value ≤ 25% of `branch_range`.
+
+    Examples (target = 0.25 * branch_range):
+        target=0.04 → 0.02 (m=2, k=-2)
+        target=0.07 → 0.05 (m=5, k=-2)
+        target=1.0  → 1.0  (m=1, k=0)
+        target=3.5  → 2.0  (m=2, k=0)
+    """
+    target = branch_range * 0.25
+    if target <= 0:
+        return 0.0
+    k = math.floor(math.log10(target))
+    base = 10.0**k
+    for m in (5, 2, 1):
+        if m * base <= target:
+            return m * base
+    return base  # unreachable; m=1 always fits since base ≤ target
+
+
+def _format_scale_bar_label(
+    length: float, branch_length: str, units: str | None
+) -> str:
+    """Format the scale-bar text per `branch_length`.
+
+    For `"div"` the user-supplied `units` (or no unit) is appended.
+    For `"num_date"` the unit is automatic: `years` if `length >= 1`,
+    otherwise `months` (rounded). `units` is ignored in the num_date case.
+    """
+    if branch_length == "num_date":
+        if length >= 1:
+            return f"{length:g} years"
+        months = round(length * 12)
+        return f"{months} months"
+    if units:
+        return f"{length:g} {units}"
+    return f"{length:g}"
+
+
+def _build_scale_bar_layer(
+    *,
+    branch_min: float,
+    bar_length: float,
+    n_tips: int,
+    extra_units: float,
+    strain_axis: str,
+    label: str,
+) -> alt.LayerChart:
+    """Build a 2-layer (bar rule + text) chart for the scale bar.
+
+    The bar lives in the extra tip-axis strip past the last tip, parallel
+    to the branch axis. branch_min..branch_min+bar_length defines the
+    bar's branch-axis extent. The bar/text data uses the same column
+    names as `_tree.segments` ("x" for branch values, "y" for tip values)
+    so it shares scales with the rest of the tree's layers.
+    """
+    bar_tip_pos = n_tips - 0.5 + extra_units * 0.35
+    text_tip_pos = n_tips - 0.5 + extra_units * 0.78
+    bar_b_start = branch_min
+    bar_b_end = branch_min + bar_length
+    bar_b_mid = (bar_b_start + bar_b_end) / 2
+
+    bar_df = pd.DataFrame([{"x": bar_b_start, "x2": bar_b_end, "y": bar_tip_pos}])
+    text_df = pd.DataFrame([{"x": bar_b_mid, "y": text_tip_pos, "label": label}])
+
+    if strain_axis == "y":
+        bar = (
+            alt.Chart(bar_df)
+            .mark_rule(strokeWidth=2.0, color="black")
+            .encode(x="x:Q", x2="x2:Q", y="y:Q")
+        )
+        text = (
+            alt.Chart(text_df)
+            .mark_text(fontSize=10, align="center", baseline="top")
+            .encode(x="x:Q", y="y:Q", text="label:N")
+        )
+    else:
+        bar = (
+            alt.Chart(bar_df)
+            .mark_rule(strokeWidth=2.0, color="black")
+            .encode(y="x:Q", y2="x2:Q", x="y:Q")
+        )
+        text = (
+            alt.Chart(text_df)
+            .mark_text(fontSize=10, align="center", baseline="top")
+            .encode(y="x:Q", x="y:Q", text="label:N")
+        )
+    return bar + text
+
+
 def _build_tree_chart(
     root: _tree.TreeNode,
     *,
@@ -993,6 +1118,9 @@ def _build_tree_chart(
     strain_dim: int | float | alt.Step,
     strain_axis: str,
     tree_location: TreeLocation,
+    scale_bar: bool = False,
+    branch_length: str = "div",
+    branch_length_units: str | None = None,
 ) -> alt.Chart:
     """Build the tree panel.
 
@@ -1024,6 +1152,40 @@ def _build_tree_chart(
     branch_min = float(seg_df[["x", "x2"]].min().min())
     leader_df = tips_df[tips_df["x"] < branch_max].assign(x2=branch_max)
 
+    # When scale_bar is on, extend the tip-axis past the last tip by
+    # `_SCALE_BAR_EXTRA_PIXELS` and matching extra data units. Per-row pixel
+    # allocation (`step_px`) stays constant, so tips 0..n-1 keep the exact
+    # same on-screen positions they had before — only the panel is taller
+    # (vertical) or wider (horizontal). Tip-row alignment with the chart
+    # is therefore preserved; the scale bar extends beyond the chart's
+    # panel edge, which the default top/left-aligned hconcat/vconcat
+    # absorbs without disturbing alignment.
+    if scale_bar:
+        if not isinstance(strain_dim, (int, float)):
+            raise ValueError(
+                "scale_bar requires a numeric strain dimension; got "
+                f"{type(strain_dim).__name__}"
+            )
+        step_px = strain_dim / n_tips
+        extra_units = _SCALE_BAR_EXTRA_PIXELS / step_px
+        extended_strain_dim = strain_dim + _SCALE_BAR_EXTRA_PIXELS
+        bar_length = _nice_scale_bar_length(branch_max - branch_min)
+        bar_label = _format_scale_bar_label(
+            bar_length, branch_length, branch_length_units
+        )
+        scale_bar_layer = _build_scale_bar_layer(
+            branch_min=branch_min,
+            bar_length=bar_length,
+            n_tips=n_tips,
+            extra_units=extra_units,
+            strain_axis=strain_axis,
+            label=bar_label,
+        )
+    else:
+        extra_units = 0.0
+        extended_strain_dim = strain_dim
+        scale_bar_layer = None
+
     if strain_axis == "y":
         # Vertical: branch axis on chart x; tip axis with tip 0 on top.
         # tree_location flips the branch domain so tips face the chart side.
@@ -1033,7 +1195,11 @@ def _build_tree_chart(
             else [branch_max, branch_min]
         )
         branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
-        tip_scale = alt.Scale(domain=[n_tips - 0.5, -0.5], nice=False, zero=False)
+        # tip-axis domain[0] (at panel bottom) extends past last tip when
+        # scale_bar=True; tip i still sits at the same on-screen pixel.
+        tip_scale = alt.Scale(
+            domain=[n_tips - 0.5 + extra_units, -0.5], nice=False, zero=False
+        )
         branch_enc = alt.X("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.Y("y:Q", axis=None, scale=tip_scale)
         leaders = (
@@ -1052,7 +1218,9 @@ def _build_tree_chart(
             .encode(x=branch_enc, y=tip_enc)
         )
         layered = leaders + branches + tip_marks
-        layered = layered.properties(width=tree_size, height=strain_dim)
+        if scale_bar_layer is not None:
+            layered = layered + scale_bar_layer
+        layered = layered.properties(width=tree_size, height=extended_strain_dim)
     elif strain_axis == "x":
         # Horizontal: branch axis on chart y (Vega-Lite default has domain[1]
         # at the top); tip axis with tip 0 on the left.
@@ -1064,7 +1232,11 @@ def _build_tree_chart(
             else [branch_min, branch_max]
         )
         branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
-        tip_scale = alt.Scale(domain=[-0.5, n_tips - 0.5], nice=False, zero=False)
+        # tip-axis domain[1] (at panel right) extends past last tip when
+        # scale_bar=True.
+        tip_scale = alt.Scale(
+            domain=[-0.5, n_tips - 0.5 + extra_units], nice=False, zero=False
+        )
         branch_enc = alt.Y("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.X("y:Q", axis=None, scale=tip_scale)
         leaders = (
@@ -1083,7 +1255,9 @@ def _build_tree_chart(
             .encode(y=branch_enc, x=tip_enc)
         )
         layered = leaders + branches + tip_marks
-        layered = layered.properties(width=strain_dim, height=tree_size)
+        if scale_bar_layer is not None:
+            layered = layered + scale_bar_layer
+        layered = layered.properties(width=extended_strain_dim, height=tree_size)
     else:
         raise ValueError(f"strain_axis must be 'x' or 'y', got {strain_axis!r}")
 

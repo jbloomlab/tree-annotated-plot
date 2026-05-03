@@ -1,0 +1,164 @@
+"""Tests for the `scale_bar` and `branch_length_units` parameters."""
+
+from __future__ import annotations
+
+import altair as alt
+import pandas as pd
+import pytest
+
+import tree_annotated_plot as tap
+from tree_annotated_plot._plot import (
+    _format_scale_bar_label,
+    _nice_scale_bar_length,
+    _SCALE_BAR_EXTRA_PIXELS,
+)
+
+
+def _auspice() -> dict:
+    """Tree spanning div ∈ [0, 0.04]."""
+    return {
+        "version": "v2",
+        "meta": {},
+        "tree": {
+            "name": "ROOT",
+            "node_attrs": {"div": 0.0},
+            "children": [
+                {"name": "A", "node_attrs": {"div": 0.02}},
+                {"name": "B", "node_attrs": {"div": 0.03}},
+                {"name": "C", "node_attrs": {"div": 0.04}},
+                {"name": "D", "node_attrs": {"div": 0.035}},
+            ],
+        },
+    }
+
+
+def _chart(*, height: int = 200) -> alt.Chart:
+    return (
+        alt.Chart(
+            pd.DataFrame(
+                {"strain": ["A", "B", "C", "D"], "titer": [1.0, 2.0, 4.0, 8.0]}
+            )
+        )
+        .mark_circle()
+        .encode(x="titer:Q", y=alt.Y("strain:N"))
+        .properties(width=200, height=height)
+    )
+
+
+# ---------- _nice_scale_bar_length ----------
+
+
+@pytest.mark.parametrize(
+    "branch_range,expected",
+    [
+        (0.16, 0.02),  # target=0.04 → 2*10^-2
+        (0.28, 0.05),  # target=0.07 → 5*10^-2
+        (4.0, 1.0),  # target=1.0 → 1*10^0
+        (14.0, 2.0),  # target=3.5 → 2*10^0
+        (40.0, 10.0),  # target=10 → 1*10^1 (10 is the largest nice ≤ 10)
+        (200.0, 50.0),  # target=50 → 5*10^1
+    ],
+)
+def test_nice_scale_bar_length(branch_range: float, expected: float) -> None:
+    assert _nice_scale_bar_length(branch_range) == pytest.approx(expected)
+
+
+def test_nice_scale_bar_length_handles_zero_and_negative() -> None:
+    assert _nice_scale_bar_length(0.0) == 0.0
+    assert _nice_scale_bar_length(-1.0) == 0.0
+
+
+# ---------- _format_scale_bar_label ----------
+
+
+def test_label_div_with_units() -> None:
+    assert (
+        _format_scale_bar_label(0.01, "div", "substitutions/site")
+        == "0.01 substitutions/site"
+    )
+
+
+def test_label_div_without_units() -> None:
+    assert _format_scale_bar_label(0.01, "div", None) == "0.01"
+
+
+def test_label_num_date_years() -> None:
+    """For num_date with length >= 1, units are always 'years' regardless
+    of the user's branch_length_units argument."""
+    assert _format_scale_bar_label(5.0, "num_date", "ignored") == "5 years"
+
+
+def test_label_num_date_months() -> None:
+    """For num_date with length < 1, units are 'months'."""
+    assert _format_scale_bar_label(0.5, "num_date", None) == "6 months"
+    assert _format_scale_bar_label(0.25, "num_date", None) == "3 months"
+
+
+# ---------- end-to-end via tap.plot ----------
+
+
+def test_scale_bar_off_default_no_extra_pixels() -> None:
+    """Default scale_bar=False keeps the tree's tip-axis at strain_dim
+    (no extra pixel margin)."""
+    out = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+    )
+    tree_height = out.to_dict()["hconcat"][0]["height"]
+    assert tree_height == 200  # matches chart height; no scale-bar margin
+
+
+def test_scale_bar_on_extends_tree_panel() -> None:
+    """scale_bar=True adds _SCALE_BAR_EXTRA_PIXELS to the tree panel
+    height. The chart panel is unchanged so tip alignment is preserved."""
+    out = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+    )
+    tree_height = out.to_dict()["hconcat"][0]["height"]
+    assert tree_height == 200 + _SCALE_BAR_EXTRA_PIXELS
+
+
+def test_scale_bar_layer_appears_in_tree_panel() -> None:
+    """With scale_bar=True the tree's LayerChart should have one extra
+    layer (scale bar = 1 layer with an inner bar+text composition)."""
+    out_off = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+    )
+    out_on = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+    )
+    n_off = len(out_off.to_dict()["hconcat"][0]["layer"])
+    n_on = len(out_on.to_dict()["hconcat"][0]["layer"])
+    assert n_on > n_off
+
+
+def test_scale_bar_label_uses_branch_length_units_for_div() -> None:
+    """The bar's text label is a one-row DataFrame altair hoists to a
+    top-level `datasets` block. Grep the serialized spec for the unit
+    string."""
+    import json
+
+    out = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+        branch_length_units="substitutions/site",
+    )
+    serialized = json.dumps(out.to_dict())
+    # The bar length on this fixture is 0.01 (target=0.25*0.04=0.01 → 1e-2).
+    assert "0.01 substitutions/site" in serialized

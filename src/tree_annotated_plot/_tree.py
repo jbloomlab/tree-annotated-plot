@@ -39,6 +39,7 @@ def load_auspice(
     source: str | Path | dict,
     *,
     tree_strain_field: str,
+    branch_length: str = "div",
     strict_version: bool = True,
 ) -> TreeNode:
     """Load an Auspice JSON tree from a path or dict.
@@ -52,6 +53,13 @@ def load_auspice(
         ``"name"`` selects the tip's top-level ``name`` field; any other value
         ``X`` selects ``node_attrs[X]`` (auto-unwrapping the Auspice
         ``{"value": ...}`` convention). Dotted paths are not accepted.
+    branch_length
+        Which Auspice node attribute supplies branch lengths. ``"div"``
+        (default) reads ``node_attrs.div`` (a scalar absolute divergence
+        from the root). ``"num_date"`` reads ``node_attrs.num_date.value``
+        (an absolute calendar position in years). In both cases the value
+        is stored on each ``TreeNode.x`` and is used as-is by layout,
+        segments, and pruning — they're branch-source-agnostic.
     strict_version
         When True (default), raise ``ValueError`` if the Auspice JSON's
         top-level ``version`` field does not start with ``"v2"``. With
@@ -59,6 +67,11 @@ def load_auspice(
         ``version`` field always warns and proceeds.
     """
     _validate_tree_strain_field(tree_strain_field)
+    if branch_length not in ("div", "num_date"):
+        raise ValueError(
+            f"branch_length={branch_length!r} not supported; expected 'div' "
+            "or 'num_date'."
+        )
 
     if isinstance(source, (str, Path)):
         with open(source) as f:
@@ -72,7 +85,7 @@ def load_auspice(
 
     if "tree" not in data:
         raise ValueError("Auspice JSON must have a top-level 'tree' field")
-    return _parse_node(data["tree"], tree_strain_field)
+    return _parse_node(data["tree"], tree_strain_field, branch_length)
 
 
 def _check_auspice_version(data: dict, *, strict_version: bool) -> None:
@@ -135,19 +148,40 @@ def _resolve_tip_strain(node_dict: dict, tree_strain_field: str) -> str:
     return v
 
 
-def _parse_node(d: dict, tree_strain_field: str) -> TreeNode:
+def _parse_node(d: dict, tree_strain_field: str, branch_length: str) -> TreeNode:
     children_dicts = d.get("children", [])
-    div = d.get("node_attrs", {}).get("div")
-    if div is None:
-        raise ValueError(f"tree node {d.get('name', '?')!r} missing node_attrs.div")
+    branch_value = _resolve_branch_length(d, branch_length)
     if children_dicts:
         # Internal node: use the Auspice top-level name (always present).
         name = d.get("name") or "<internal>"
     else:
         # Tip: resolve via tree_strain_field.
         name = _resolve_tip_strain(d, tree_strain_field)
-    children = [_parse_node(c, tree_strain_field) for c in children_dicts]
-    return TreeNode(name=name, x=float(div), children=children)
+    children = [
+        _parse_node(c, tree_strain_field, branch_length) for c in children_dicts
+    ]
+    return TreeNode(name=name, x=float(branch_value), children=children)
+
+
+def _resolve_branch_length(node_dict: dict, branch_length: str) -> float:
+    """Pull the branch-length value out of a node's node_attrs."""
+    attrs = node_dict.get("node_attrs", {})
+    if branch_length == "div":
+        v = attrs.get("div")
+        if v is None:
+            raise ValueError(
+                f"tree node {node_dict.get('name', '?')!r} has no "
+                "node_attrs.div (required by branch_length='div')."
+            )
+        return v
+    # branch_length == "num_date"
+    nd = attrs.get("num_date")
+    if not isinstance(nd, dict) or "value" not in nd:
+        raise ValueError(
+            f"tree node {node_dict.get('name', '?')!r} has no "
+            "node_attrs.num_date.value (required by branch_length='num_date')."
+        )
+    return nd["value"]
 
 
 def _prune_tree_to(root: TreeNode, keep_strains: set[str]) -> TreeNode:
