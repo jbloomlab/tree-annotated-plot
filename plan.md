@@ -960,7 +960,7 @@ mkdocstrings + mkdocs-click; do not duplicate signature info elsewhere".
 | Scale bar default | Off (`scale_bar=False`). | User answer 3. |
 | Where the example data lives | Auspice JSONs downloaded by `examples/fetch_auspice_data.py` into `./examples/data/`; the existing `flu-seqneut-2025to2026_titer_charts.py` and `synthetic_example.py` are updated to write *all* generated artifacts there too; `./examples/data/` is gitignored. | User answer 4 + harmonization request. |
 | CLI dependency | `click` (auto-doc-generation friendly). | User answer 5. |
-| Chart-side / tree-side join for Kikawa data | (1) — add the join attr (e.g. `derived_haplotype`) to the Auspice tree, use it as `tree_strain_field`. Chart's `axis_label` stays as is. | User locked answer 1. |
+| Chart-side / tree-side join for Kikawa data | (1) — use `node_attrs.derived_haplotype.value` as the tree-side join attr. Chart's `axis_label` stays as is. **Verified:** the upstream Auspice JSONs already carry this attr on every tip and the values match the chart's `axis_label` set exactly (54/54 H3N2, 31/31 H1N1). | User locked answer 1 + verification. |
 | Pruning flavor | **Strict**: drop every tip not in the chart, collapse single-child internals. Tree shows only chart strains. | User locked answer 2. |
 | Clade coloring / tree decoration | **Deferred to Phase 3.** Out of scope for Phase 2. | User locked answer 3. |
 | Image-snapshot regression testing | **Deferred to Phase 3.** Out of scope for Phase 2. | User locked answer 4. |
@@ -999,29 +999,33 @@ Done before Phase 2a so the substantive phases stay focused:
 - Verify both builder scripts still produce their expected artifacts
   (now in `./examples/data/`) and that `scripts/check.sh` is green.
 
-### Phase 2a — real-data wiring, fetch script, harmonized example layout
-- **Move all generated example artifacts under `./examples/data/`.** Update
-  `examples/flu-seqneut-2025to2026_titer_charts.py` to write its `.html` /
-  `.json` outputs there (currently it writes to `./examples/`). Update
-  `examples/synthetic_example.py` similarly so its HTML/PNG outputs land in
-  `./examples/data/` too. Update `.gitignore` to ignore `examples/data/`
-  rather than the per-file patterns. Move the existing
-  `flu-seqneut-2025to2026_*_titers.{html,json}` files now sitting in
-  `./examples/` into `./examples/data/` (or just delete them and let the
-  builder regenerate, since they're gitignored).
-- Add `examples/fetch_auspice_data.py` that downloads the two Auspice JSONs
-  to `./examples/data/`. Idempotent — skips if file exists. Pulls from:
+### Phase 2a — real-data wiring + fetch script
+
+The example-layout housekeeping (artifact move, builder updates,
+`.gitignore` collapse, `scripts/check.sh`) is done in the Phase 2-prep
+commit above and is no longer part of this phase.
+
+- **Auspice JSONs are already join-ready.** Verified out-of-band: both
+  upstream files at the URLs below already carry
+  `node_attrs.derived_haplotype.value` on every tip, and those values
+  exactly match the chart's `axis_label` values (54/54 for H3N2, 31/31
+  for H1N1, no asymmetry on either side). No regeneration required.
+- Add `examples/fetch_auspice_data.py` that downloads the two Auspice
+  JSONs to `./examples/data/`. Idempotent — skips if file exists. Pulls
+  from:
   - `https://raw.githubusercontent.com/jbloomlab/flu-seqneut-2025to2026/main/auspice/flu-seqneut-2025to2026_H3N2.json`
   - `https://raw.githubusercontent.com/jbloomlab/flu-seqneut-2025to2026/main/auspice/flu-seqneut-2025to2026_H1N1.json`
-- **Execute the locked join-key approach** (locked answer 1): the user
-  regenerates the Auspice JSONs so each tip has the relevant join attribute
-  under `node_attrs` (e.g. `node_attrs.derived_haplotype.value` matches
-  the chart's `axis_label` values). Phase 2a is blocked on this regen; the
-  fetch script downloads the regenerated JSONs.
-- Add `tests/test_real_data.py` that runs `tap.plot` against the in-process
-  H3N2 chart-construction module AND against the saved JSON, with the
-  matching Auspice JSON. Marked `pytest.mark.network` (skipped if the data
-  isn't fetched yet) so CI without network doesn't fail.
+- Add `tests/test_real_data.py` that runs `tap.plot` against (a) the
+  in-process H3N2 / H1N1 chart-construction modules and (b) the saved
+  chart JSONs, with the matching Auspice JSONs and
+  `chart_strain_field="axis_label"`, `tree_strain_field="derived_haplotype"`.
+  Marked `pytest.mark.network` (or skipped if the data isn't fetched
+  yet) so CI without network doesn't fail.
+
+Because the Kikawa real data is in *perfect symmetry* (every chart
+strain matches a tree tip and vice versa), it does **not** exercise the
+`prune_tree_to_chart` code path. That path needs synthetic fixtures —
+see Phase 2d.
 
 ### Phase 2b — chart introspection that handles concat / facet / layer
 - Replace the current `_y_field` / `_chart_y_values` pair in `_plot.py` with
@@ -1035,7 +1039,7 @@ Done before Phase 2a so the substantive phases stay focused:
 - The `_apply_tree_order_to_chart_strain_axis` helper deepcopies the spec
   and rewrites the `sort` at every found path. It does **not** otherwise
   touch the chart.
-- Tests against the H3N2 and H1N1 saved-chart JSONs in `examples/`.
+- Tests against the H3N2 and H1N1 saved-chart JSONs in `examples/data/`.
 
 ### Phase 2c — chart loading (JSON + HTML) + version-compat check
 - Add `_load_chart(chart_input)` handling `Chart` / subtypes, JSON path,
@@ -1048,7 +1052,7 @@ Done before Phase 2a so the substantive phases stay focused:
 - All public entry points go through this helper.
 - Tests:
   - JSON path → spec parses, returns `alt.Chart`-equivalent dict.
-  - HTML path against `examples/flu-seqneut-2025to2026_H3N2_titers.html`
+  - HTML path against `examples/data/flu-seqneut-2025to2026_H3N2_titers.html`
     and `flu-seqneut-2025to2026_H1N1_titers.html` (the user's real saved
     pages) → extracted spec round-trips through `alt.Chart.from_dict()`
     and matches the JSON-saved sibling for the same chart.
@@ -1068,17 +1072,27 @@ Done before Phase 2a so the substantive phases stay focused:
   alternative fields whose values overlap, and include sample values plus
   any high-overlap candidates in the error message.
 - Add `_prune_tree_to(tree, keep_strains)` in `_tree.py`: returns a new
-  pruned `TreeNode` with single-child internals collapsed and branch lengths
-  combined (the **strict** flavor — locked answer 2).
-- Tests:
+  pruned `TreeNode` with single-child internals collapsed (the **strict**
+  flavor — locked answer 2). Branch-length handling per the Pruning-details
+  rules: `div` deltas sum into the surviving child; `num_date` dates on
+  collapsed internals are discarded; `node_attrs` on collapsed internals
+  are dropped; the pruned tree is re-rooted to the LCA of the kept tips.
+- **Synthetic fixtures for prune testing.** The Kikawa real data is in
+  perfect symmetry and won't exercise these paths. Add fixtures under
+  `tests/data/` (or build them inline in the test module): a small
+  Auspice-shaped dict with extra tips and obvious mismatches. Cover:
   - chart strain not in tree → fatal even with `prune_tree_to_chart=True`.
   - tree tip not in chart, default → fatal.
-  - tree tip not in chart, `prune_tree_to_chart=True` → succeeds, output
-    chart strain count matches `chart_strains`, tree topology preserved.
+  - tree tip not in chart, `prune_tree_to_chart=True` → succeeds; tip
+    count matches `chart_strains`; topology preserved among kept tips;
+    LCA-rooting verified by comparing root-to-tip distances; collapsed
+    single-child internals' `div` deltas summed correctly into the
+    surviving child; `num_date` dates dropped (not summed) on collapsed
+    internals.
   - duplicate `tree_strain_field` values on the tree → fatal.
-  - error message format test: a deliberate mismatch case asserts that the
-    error string contains both sample-values blocks and at least one
-    candidate-field suggestion.
+  - error message format: a deliberate mismatch asserts the error string
+    contains both sample-values blocks and at least one candidate-field
+    suggestion.
 
 ### Phase 2e — `chart_strain_field` / `tree_strain_field` parameters
 - Wire **both** `chart_strain_field` and `tree_strain_field` as required
