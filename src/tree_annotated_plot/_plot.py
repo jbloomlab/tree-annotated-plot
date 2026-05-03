@@ -37,6 +37,9 @@ def plot(
     branch_length: Literal["div", "num_date"] = "div",
     tree_size: int = 100,
     tree_location: TreeLocation | None = None,
+    tree_line_width: float = 1.5,
+    tree_node_size: float = 28,
+    leader_line_width: float = 1.0,
     scale_bar: bool = False,
     branch_length_units: str | None = None,
     prune_tree_to_chart: bool = False,
@@ -95,6 +98,19 @@ def plot(
         with the labels. Specifying `"top"`/`"bottom"` for a y-encoded
         strain (or `"left"`/`"right"` for an x-encoded strain) raises
         `ValueError`.
+    tree_line_width
+        Stroke width (px) for the tree's branch lines. Default 1.5.
+    tree_node_size
+        Area (px²) of the small filled circles drawn at each tip.
+        Default 28. Setting `tree_node_size=0` disables the tip-circle
+        layer entirely (useful when branches are densely packed and the
+        dots clutter the figure). Negative values raise.
+    leader_line_width
+        Stroke width (px) for the dashed leader lines that connect each
+        tip's branch endpoint to the strain row when the branch doesn't
+        extend all the way to `branch_max`. Default 1.0. Setting
+        `leader_line_width=0` disables the leader-line layer entirely.
+        Negative values raise.
     scale_bar
         Off by default. When True, adds a small bar in the tree panel
         whose length corresponds to a "nice" number (largest value among
@@ -179,6 +195,9 @@ def plot(
         strain_dim=strain_dim,
         strain_axis=axis,
         tree_location=location,
+        tree_line_width=tree_line_width,
+        tree_node_size=tree_node_size,
+        leader_line_width=leader_line_width,
         scale_bar=scale_bar,
         branch_length=branch_length,
         branch_length_units=branch_length_units,
@@ -1137,6 +1156,9 @@ def _build_tree_chart(
     strain_dim: int | float | alt.Step,
     strain_axis: str,
     tree_location: TreeLocation,
+    tree_line_width: float = 1.5,
+    tree_node_size: float = 28,
+    leader_line_width: float = 1.0,
     scale_bar: bool = False,
     branch_length: str = "div",
     branch_length_units: str | None = None,
@@ -1163,6 +1185,13 @@ def _build_tree_chart(
     distance `tip.x < branch_max` get a leader from `tip.x` to `branch_max`
     in branch-coordinate, and the scale handles the pixel mapping.
     """
+    if tree_line_width < 0:
+        raise ValueError(f"tree_line_width must be >= 0, got {tree_line_width}")
+    if tree_node_size < 0:
+        raise ValueError(f"tree_node_size must be >= 0, got {tree_node_size}")
+    if leader_line_width < 0:
+        raise ValueError(f"leader_line_width must be >= 0, got {leader_line_width}")
+
     seg_df = _tree.segments(root)
     tips_df = pd.DataFrame(
         [{"name": t.name, "x": t.x, "y": t.y} for t in _tree.tips(root)]
@@ -1222,24 +1251,31 @@ def _build_tree_chart(
         )
         branch_enc = alt.X("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.Y("y:Q", axis=None, scale=tip_scale)
-        leaders = (
-            alt.Chart(leader_df)
-            .mark_rule(stroke="#888", strokeWidth=1.0, strokeDash=[2, 2])
-            .encode(x=branch_enc, x2="x2:Q", y=tip_enc)
-        )
-        branches = (
+        layers: list[alt.Chart] = []
+        if leader_line_width > 0:
+            layers.append(
+                alt.Chart(leader_df)
+                .mark_rule(
+                    stroke="#888",
+                    strokeWidth=leader_line_width,
+                    strokeDash=[2, 2],
+                )
+                .encode(x=branch_enc, x2="x2:Q", y=tip_enc)
+            )
+        layers.append(
             alt.Chart(seg_df)
-            .mark_rule(strokeWidth=1.5)
+            .mark_rule(strokeWidth=tree_line_width)
             .encode(x=branch_enc, x2="x2:Q", y=tip_enc, y2="y2:Q")
         )
-        tip_marks = (
-            alt.Chart(tips_df)
-            .mark_circle(size=28, color="black")
-            .encode(x=branch_enc, y=tip_enc)
-        )
-        layered = leaders + branches + tip_marks
+        if tree_node_size > 0:
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_circle(size=tree_node_size, color="black")
+                .encode(x=branch_enc, y=tip_enc)
+            )
         if scale_bar_layer is not None:
-            layered = layered + scale_bar_layer
+            layers.append(scale_bar_layer)
+        layered = alt.layer(*layers)
         layered = layered.properties(width=tree_size, height=extended_strain_dim)
     elif strain_axis == "x":
         # Horizontal: branch axis on chart y (Vega-Lite default has domain[1]
@@ -1259,24 +1295,31 @@ def _build_tree_chart(
         )
         branch_enc = alt.Y("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.X("y:Q", axis=None, scale=tip_scale)
-        leaders = (
-            alt.Chart(leader_df)
-            .mark_rule(stroke="#888", strokeWidth=1.0, strokeDash=[2, 2])
-            .encode(y=branch_enc, y2="x2:Q", x=tip_enc)
-        )
-        branches = (
+        layers = []
+        if leader_line_width > 0:
+            layers.append(
+                alt.Chart(leader_df)
+                .mark_rule(
+                    stroke="#888",
+                    strokeWidth=leader_line_width,
+                    strokeDash=[2, 2],
+                )
+                .encode(y=branch_enc, y2="x2:Q", x=tip_enc)
+            )
+        layers.append(
             alt.Chart(seg_df)
-            .mark_rule(strokeWidth=1.5)
+            .mark_rule(strokeWidth=tree_line_width)
             .encode(y=branch_enc, y2="x2:Q", x=tip_enc, x2="y2:Q")
         )
-        tip_marks = (
-            alt.Chart(tips_df)
-            .mark_circle(size=28, color="black")
-            .encode(y=branch_enc, x=tip_enc)
-        )
-        layered = leaders + branches + tip_marks
+        if tree_node_size > 0:
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_circle(size=tree_node_size, color="black")
+                .encode(y=branch_enc, x=tip_enc)
+            )
         if scale_bar_layer is not None:
-            layered = layered + scale_bar_layer
+            layers.append(scale_bar_layer)
+        layered = alt.layer(*layers)
         layered = layered.properties(width=extended_strain_dim, height=tree_size)
     else:
         raise ValueError(f"strain_axis must be 'x' or 'y', got {strain_axis!r}")
