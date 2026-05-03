@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Jesse Bloom", email = "jbloom@fredhutch.org" }]
 dependencies = [
     "altair>=6.0,<7",
+    "click>=8.0",
     "pandas>=2.0",
     "vl-convert-python>=1.9",
 ]
@@ -22,6 +23,9 @@ dev = [
     "ruff>=0.6",
     "black>=24",
 ]
+
+[project.scripts]
+tree-annotated-plot = "tree_annotated_plot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tree_annotated_plot"]

@@ -15,6 +15,7 @@ import altair as alt
 import pandas as pd
 
 from . import _tree
+from ._config import PlotConfig, TreeLocation
 
 # Accepted chart input forms for the public `plot` function.
 ChartInput = alt.TopLevelMixin | str | Path | dict
@@ -23,9 +24,6 @@ ChartInput = alt.TopLevelMixin | str | Path | dict
 # `path` is a tuple of dict keys / list indices that locates `encoding_dict`
 # inside the spec, ending with ("encoding", channel).
 _AxisHit = tuple[tuple, dict, str]
-
-
-TreeLocation = Literal["left", "right", "top", "bottom"]
 
 
 def plot(
@@ -149,38 +147,71 @@ def plot(
         tree on top and the chart below. The orientation is fully derived
         from which axis carries `chart_strain_field`.
     """
+    return _build(
+        tree,
+        chart,
+        PlotConfig(
+            chart_strain_field=chart_strain_field,
+            tree_strain_field=tree_strain_field,
+            branch_length=branch_length,
+            tree_size=tree_size,
+            tree_location=tree_location,
+            tree_line_width=tree_line_width,
+            tree_node_size=tree_node_size,
+            leader_line_width=leader_line_width,
+            scale_bar=scale_bar,
+            branch_length_units=branch_length_units,
+            prune_tree_to_chart=prune_tree_to_chart,
+            strict_version=strict_version,
+        ),
+    )
+
+
+def _build(
+    tree: str | Path | dict | _tree.TreeNode,
+    chart: ChartInput,
+    config: PlotConfig,
+) -> alt.HConcatChart | alt.VConcatChart:
+    """Shared implementation used by both `plot()` and the CLI.
+
+    `tree` and `chart` are the data inputs (the things you can't usefully
+    set on a config object); `config` carries every styling / behavior
+    knob. Both surfaces converge here so they can never disagree.
+    """
     root = _ensure_tree(
         tree,
-        tree_strain_field,
-        branch_length=branch_length,
-        strict_version=strict_version,
+        config.tree_strain_field,
+        branch_length=config.branch_length,
+        strict_version=config.strict_version,
     )
     tip_list = _tree.layout(root)
     tip_names = [t.name for t in tip_list]
 
-    _check_no_duplicate_tip_strains(tip_names, tree_strain_field=tree_strain_field)
+    _check_no_duplicate_tip_strains(
+        tip_names, tree_strain_field=config.tree_strain_field
+    )
 
-    chart = _load_chart(chart, strict_version=strict_version)
+    chart = _load_chart(chart, strict_version=config.strict_version)
     spec = chart.to_dict()
 
-    axis_hits = _find_strain_encoding(spec, chart_strain_field)
+    axis_hits = _find_strain_encoding(spec, config.chart_strain_field)
     axis = axis_hits[0][2]
 
-    location = _resolve_tree_location(tree_location, axis)
+    location = _resolve_tree_location(config.tree_location, axis)
 
-    chart_strains = _extract_chart_strains(spec, axis_hits, chart_strain_field)
+    chart_strains = _extract_chart_strains(spec, axis_hits, config.chart_strain_field)
 
     _reconcile_tips_and_strains(
         tree_strains=tip_names,
         chart_strains=chart_strains,
-        chart_strain_field=chart_strain_field,
-        tree_strain_field=tree_strain_field,
-        prune_tree_to_chart=prune_tree_to_chart,
+        chart_strain_field=config.chart_strain_field,
+        tree_strain_field=config.tree_strain_field,
+        prune_tree_to_chart=config.prune_tree_to_chart,
         chart_spec=spec,
         tree_source=tree,
     )
 
-    if prune_tree_to_chart and (set(tip_names) - set(chart_strains)):
+    if config.prune_tree_to_chart and (set(tip_names) - set(chart_strains)):
         root = _tree._prune_tree_to(root, set(chart_strains))
         tip_list = _tree.layout(root)
         tip_names = [t.name for t in tip_list]
@@ -191,19 +222,21 @@ def plot(
     tree_chart = _build_tree_chart(
         root,
         n_tips=len(tip_names),
-        tree_size=tree_size,
+        tree_size=config.tree_size,
         strain_dim=strain_dim,
         strain_axis=axis,
         tree_location=location,
-        tree_line_width=tree_line_width,
-        tree_node_size=tree_node_size,
-        leader_line_width=leader_line_width,
-        scale_bar=scale_bar,
-        branch_length=branch_length,
-        branch_length_units=branch_length_units,
+        tree_line_width=config.tree_line_width,
+        tree_node_size=config.tree_node_size,
+        leader_line_width=config.leader_line_width,
+        scale_bar=config.scale_bar,
+        branch_length=config.branch_length,
+        branch_length_units=config.branch_length_units,
     )
 
-    new_chart = _apply_tree_order_to_chart_object(chart, chart_strain_field, tip_names)
+    new_chart = _apply_tree_order_to_chart_object(
+        chart, config.chart_strain_field, tip_names
+    )
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
     combined = _concat_for_location(
@@ -922,15 +955,19 @@ def _pop_toplevel_only_attrs(
 
     Returns (config, other) where `config` is the popped Config (or Undefined)
     and `other` is a dict of any other popped attrs ($schema, padding,
-    autosize, background) that are non-Undefined.
+    autosize, background, datasets, usermeta) that are non-Undefined.
 
     Vega-Lite forbids these properties on subspecs; altair enforces this in
-    `_check_if_valid_subspec`. We move them onto the outer HConcatChart we
-    build, where they belong.
+    `_check_if_valid_subspec` (or in `to_dict` validation for some keys).
+    We move them onto the outer HConcatChart we build. `datasets` in
+    particular shows up here only when the user passed a JSON / HTML / dict
+    chart — `alt.Chart.from_dict(...)` parks the data dict at the top
+    level, but the outer hconcat we wrap it in won't serialize cleanly
+    with `datasets` on a subspec.
     """
     config = chart._kwds.pop("config", alt.Undefined)
     other: dict = {}
-    for k in ("$schema", "padding", "autosize", "background"):
+    for k in ("$schema", "padding", "autosize", "background", "datasets", "usermeta"):
         v = chart._kwds.pop(k, alt.Undefined)
         if v is not alt.Undefined:
             other[k] = v
