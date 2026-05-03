@@ -2,9 +2,6 @@
 !.git*
 /_*
 *.out
-examples/*.html
-examples/*.json
-examples/*.png
-examples/*.svg
+examples/data/
 __pycache__/
 *.pyc

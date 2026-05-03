@@ -5,8 +5,8 @@ Run from the project root:
     .venv/bin/python examples/synthetic_example.py
 
 Outputs:
-    examples/synthetic_example.html   (interactive Vega/Altair page)
-    examples/synthetic_example.png    (static raster via vl-convert)
+    examples/data/synthetic_example.html   (interactive Vega/Altair page)
+    examples/data/synthetic_example.png    (static raster via vl-convert)
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import pandas as pd
 
 import tree_annotated_plot as tap
 
-OUT_DIR = Path(__file__).parent
+OUT_DIR = Path(__file__).parent / "data"
 
 
 def synthetic_auspice() -> dict:
@@ -147,6 +147,7 @@ def main() -> None:
     chart = build_chart(synthetic_titers())
     annotated = tap.plot(synthetic_auspice(), chart, tree_width=140)
 
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     html_path = OUT_DIR / "synthetic_example.html"
     png_path = OUT_DIR / "synthetic_example.png"
 

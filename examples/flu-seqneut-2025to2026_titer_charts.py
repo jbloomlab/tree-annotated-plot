@@ -1,7 +1,7 @@
 """Generate H3N2 IQR and H1N1 individual-sera titer plots from Kikawa et al (2026).
 
 Reads three CSVs published in the jbloomlab/flu-seqneut-2025to2026 repo and
-writes 4 files (two charts x HTML+JSON) to ./examples/.
+writes 4 files (two charts x HTML+JSON) to ./examples/data/.
 
 Run from the project root:
 
@@ -40,7 +40,7 @@ PLOT_STRAIN_TYPES = [CIRCULATING_STRAIN_TYPE, "recent_vaccine"]
 TITER_LOWER_LIMIT = 40
 FACET_SIZE = 150
 
-OUT_DIR = Path(__file__).parent
+OUT_DIR = Path(__file__).parent / "data"
 
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -378,6 +378,7 @@ def make_chart(
 
 
 def main() -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     titers, viruses, sera = load_data()
     metadata = build_metadata(sera)
     all_cohorts = ["All"] + sorted(sera["cohort"].unique())
