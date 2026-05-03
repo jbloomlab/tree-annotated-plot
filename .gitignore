@@ -3,6 +3,7 @@
 /_*
 *.out
 examples/*.html
+examples/*.json
 examples/*.png
 examples/*.svg
 __pycache__/
