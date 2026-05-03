@@ -8,7 +8,7 @@ import re
 import warnings
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import altair as alt
 import pandas as pd
@@ -24,6 +24,9 @@ ChartInput = alt.TopLevelMixin | str | Path | dict
 _AxisHit = tuple[tuple, dict, str]
 
 
+TreeLocation = Literal["left", "right", "top", "bottom"]
+
+
 def plot(
     tree: str | Path | dict | _tree.TreeNode,
     chart: ChartInput,
@@ -31,6 +34,7 @@ def plot(
     chart_strain_field: str,
     tree_strain_field: str,
     tree_size: int = 100,
+    tree_location: TreeLocation | None = None,
     prune_tree_to_chart: bool = False,
     strict_version: bool = True,
 ) -> alt.HConcatChart | alt.VConcatChart:
@@ -62,11 +66,27 @@ def plot(
         accepted.
     tree_size
         Size in pixels of the tree's branch axis (the dimension perpendicular
-        to the strain rows). For vertical layout (chart strain on `y` → tree
-        on the left) this is the tree panel's *width*; for horizontal layout
-        (chart strain on `x` → tree on top) this is the tree panel's
-        *height*. The tree's tip-axis dimension is computed from the chart's
-        strain dimension so tips align row-for-row with chart rows.
+        to the strain rows). For vertical layout (chart strain on `y`) this
+        is the tree panel's *width*; for horizontal layout (chart strain on
+        `x`) this is the tree panel's *height*. The tree's tip-axis
+        dimension is computed from the chart's strain dimension so tips
+        align row-for-row with chart rows.
+    tree_location
+        Where to draw the tree relative to the chart. Valid values depend
+        on which axis carries the strain encoding:
+
+        - chart strain on `y` → `"left"` (default) or `"right"`. With
+          `"right"`, the tree is hconcat'd on the right of the chart and
+          its branches flip so tips face left toward the chart.
+        - chart strain on `x` → `"bottom"` (default) or `"top"`. With
+          `"top"`, the tree is vconcat'd above the chart and its branches
+          flip so tips face down toward the chart.
+
+        Defaults match where the chart's strain-axis labels naturally
+        render (left side for y-axis, bottom for x-axis), so tips align
+        with the labels. Specifying `"top"`/`"bottom"` for a y-encoded
+        strain (or `"left"`/`"right"` for an x-encoded strain) raises
+        `ValueError`.
     prune_tree_to_chart
         When False (default), tree tips not present in the chart's strain
         set are a fatal error. When True, those tips (and any internal
@@ -103,6 +123,8 @@ def plot(
     axis_hits = _find_strain_encoding(spec, chart_strain_field)
     axis = axis_hits[0][2]
 
+    location = _resolve_tree_location(tree_location, axis)
+
     chart_strains = _extract_chart_strains(spec, axis_hits, chart_strain_field)
 
     _reconcile_tips_and_strains(
@@ -129,25 +151,71 @@ def plot(
         tree_size=tree_size,
         strain_dim=strain_dim,
         strain_axis=axis,
+        tree_location=location,
     )
 
     new_chart = _apply_tree_order_to_chart_object(chart, chart_strain_field, tip_names)
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
-    if axis == "y":
-        # Vertical: tree on the left, chart on the right.
-        combined = alt.hconcat(tree_chart, new_chart, spacing=0).resolve_scale(
-            y="independent"
-        )
-    else:
-        # Horizontal: tree on top, chart below.
-        combined = alt.vconcat(tree_chart, new_chart, spacing=0).resolve_scale(
-            x="independent"
-        )
+    combined = _concat_for_location(
+        tree_chart=tree_chart, user_chart=new_chart, location=location
+    )
     _apply_combined_config(combined, hoisted_config)
     for k, v in hoisted_other.items():
         combined._kwds[k] = v
     return combined
+
+
+def _resolve_tree_location(
+    tree_location: TreeLocation | None, strain_axis: str
+) -> TreeLocation:
+    """Pick the default tree_location matching the strain axis, or validate
+    that an explicit value is compatible with the axis."""
+    valid_for_y = ("left", "right")
+    valid_for_x = ("top", "bottom")
+    if tree_location is None:
+        return "left" if strain_axis == "y" else "bottom"
+    if strain_axis == "y" and tree_location not in valid_for_y:
+        raise ValueError(
+            f"tree_location={tree_location!r} is incompatible with a "
+            "y-encoded strain (vertical layout). The chart's strain "
+            "axis is on `y`, so the tree must be alongside it on the "
+            f"left or right. Valid values: {valid_for_y!r}."
+        )
+    if strain_axis == "x" and tree_location not in valid_for_x:
+        raise ValueError(
+            f"tree_location={tree_location!r} is incompatible with an "
+            "x-encoded strain (horizontal layout). The chart's strain "
+            "axis is on `x`, so the tree must be above or below it. "
+            f"Valid values: {valid_for_x!r}."
+        )
+    return tree_location
+
+
+def _concat_for_location(
+    *,
+    tree_chart: alt.TopLevelMixin,
+    user_chart: alt.TopLevelMixin,
+    location: TreeLocation,
+) -> alt.HConcatChart | alt.VConcatChart:
+    """Concat tree and chart in the order implied by the tree's location."""
+    if location == "left":
+        return alt.hconcat(tree_chart, user_chart, spacing=0).resolve_scale(
+            y="independent"
+        )
+    if location == "right":
+        return alt.hconcat(user_chart, tree_chart, spacing=0).resolve_scale(
+            y="independent"
+        )
+    if location == "top":
+        return alt.vconcat(tree_chart, user_chart, spacing=0).resolve_scale(
+            x="independent"
+        )
+    if location == "bottom":
+        return alt.vconcat(user_chart, tree_chart, spacing=0).resolve_scale(
+            x="independent"
+        )
+    raise ValueError(f"unreachable: tree_location={location!r}")
 
 
 def _ensure_tree(
@@ -924,23 +992,29 @@ def _build_tree_chart(
     tree_size: int,
     strain_dim: int | float | alt.Step,
     strain_axis: str,
+    tree_location: TreeLocation,
 ) -> alt.Chart:
     """Build the tree panel.
 
     `_tree.segments(root)` returns a dataframe with columns x, x2 (branch-axis
     values from the root's div) and y, y2 (tip-axis index). For each layout
-    we bind those columns to chart x or chart y differently:
+    we bind those columns to chart x or chart y differently, and the
+    branch_scale domain orientation depends on which side of the chart the
+    tree sits on (so the tip-end of every branch always faces the chart):
 
-    - `strain_axis="y"` (vertical, hconcat). Tree on the left of the chart.
-      Branch axis on chart x, growing rightward (root on the left). Tip
-      axis on chart y, growing *downward* (so tip 0 is at the top, matching
-      the chart's strain order). Tree size = `tree_size` px wide;
-      tip-axis dim = `strain_dim` (matches chart's strain-axis height).
-    - `strain_axis="x"` (horizontal, vconcat). Tree on top of the chart.
-      Branch axis on chart y, growing *downward* (root on top, tips at
-      bottom). Tip axis on chart x, growing rightward (tip 0 on the left,
-      matching the chart's strain order). Tree size = `tree_size` px tall;
-      tip-axis dim = `strain_dim` (matches chart's strain-axis width).
+    - `tree_location="left"` (strain on y). Branch axis on chart x; root on
+      the left, tips on the right (toward the chart). domain = [min, max].
+    - `tree_location="right"` (strain on y). Branch axis on chart x; root on
+      the right, tips on the left (toward the chart). domain = [max, min].
+    - `tree_location="top"` (strain on x). Branch axis on chart y; root at
+      the top, tips at the bottom (toward the chart). Vega-Lite y has
+      domain[1] at the top, so root-on-top means domain = [max, min].
+    - `tree_location="bottom"` (strain on x). Branch axis on chart y; root
+      at the bottom, tips at the top (toward the chart). domain = [min, max].
+
+    Tip-axis scale and the leader_df are layout-direction-agnostic: tips at
+    distance `tip.x < branch_max` get a leader from `tip.x` to `branch_max`
+    in branch-coordinate, and the scale handles the pixel mapping.
     """
     seg_df = _tree.segments(root)
     tips_df = pd.DataFrame(
@@ -951,10 +1025,14 @@ def _build_tree_chart(
     leader_df = tips_df[tips_df["x"] < branch_max].assign(x2=branch_max)
 
     if strain_axis == "y":
-        # Vertical: branch axis grows rightward; tip axis with tip 0 on top.
-        branch_scale = alt.Scale(
-            domain=[branch_min, branch_max], nice=False, zero=False
+        # Vertical: branch axis on chart x; tip axis with tip 0 on top.
+        # tree_location flips the branch domain so tips face the chart side.
+        branch_domain = (
+            [branch_min, branch_max]
+            if tree_location == "left"
+            else [branch_max, branch_min]
         )
+        branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
         tip_scale = alt.Scale(domain=[n_tips - 0.5, -0.5], nice=False, zero=False)
         branch_enc = alt.X("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.Y("y:Q", axis=None, scale=tip_scale)
@@ -976,11 +1054,16 @@ def _build_tree_chart(
         layered = leaders + branches + tip_marks
         layered = layered.properties(width=tree_size, height=strain_dim)
     elif strain_axis == "x":
-        # Horizontal: branch axis grows downward (root on top); tip axis
-        # with tip 0 on the left.
-        branch_scale = alt.Scale(
-            domain=[branch_max, branch_min], nice=False, zero=False
+        # Horizontal: branch axis on chart y (Vega-Lite default has domain[1]
+        # at the top); tip axis with tip 0 on the left.
+        # tree_location="top" → root at top → branch_max at bottom.
+        # tree_location="bottom" → root at bottom → branch_max at top.
+        branch_domain = (
+            [branch_max, branch_min]
+            if tree_location == "top"
+            else [branch_min, branch_max]
         )
+        branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
         tip_scale = alt.Scale(domain=[-0.5, n_tips - 0.5], nice=False, zero=False)
         branch_enc = alt.Y("x:Q", axis=None, scale=branch_scale)
         tip_enc = alt.X("y:Q", axis=None, scale=tip_scale)

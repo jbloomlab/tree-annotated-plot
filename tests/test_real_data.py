@@ -270,10 +270,11 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
 def test_h1n1_end_to_end_via_tap_plot() -> None:
     """tap.plot against the real H1N1 chart + Auspice tree.
 
-    The H1N1 chart is horizontal (strain on x) → output is VConcatChart
-    with the tree on top and the chart below. The chart panel's strain
-    sort is rewritten to the tree's tip order; the tree's chart-x
-    dimension matches the chart's `Step(11) * 31` strain-axis width.
+    The H1N1 chart is horizontal (strain on x). The default
+    `tree_location` for x-encoded strain is "bottom" so the tree's tips
+    sit just under the chart's strain labels (which Vega-Lite renders at
+    the bottom of an x-axis). Output is therefore VConcatChart with the
+    chart at vconcat[0] and the tree at vconcat[1].
     """
     import altair as alt
 
@@ -303,11 +304,12 @@ def test_h1n1_end_to_end_via_tap_plot() -> None:
     expected_order = _depth_first_haplotypes(tree_json["tree"])
 
     out_dict = out.to_dict()
+    chart_panel = out_dict["vconcat"][0]
+    tree_panel = out_dict["vconcat"][1]
 
     # Every axis_label x-encoding in the chart panel must carry the tree's
     # tip order. (The H1N1 chart's body is a LayerChart with two layers,
     # same shape as H3N2 modulo orientation.)
-    chart_panel = out_dict["vconcat"][1]
     out_sorts = [(path, sort) for path, sort in _iter_axis_label_sorts_x(chart_panel)]
     assert len(out_sorts) == 2, (
         f"expected 2 axis_label x-encodings in the H1N1 output (one per "
@@ -322,11 +324,11 @@ def test_h1n1_end_to_end_via_tap_plot() -> None:
     # Tip alignment: the H1N1 chart's strain axis is Step(11) on 31
     # strains, so the chart's strain-axis body renders at 11 * 31 = 341px.
     # The tree panel's chart-x dimension (its width) must match exactly.
-    assert out_dict["vconcat"][0]["width"] == 11 * 31
+    assert tree_panel["width"] == 11 * 31
 
     # Tree panel border suppression: same contract as H3N2 — the tree's
     # panel-level view stroke=None overrides any inherited config stroke.
-    assert out_dict["vconcat"][0].get("view") == {"stroke": None}
+    assert tree_panel.get("view") == {"stroke": None}
 
 
 def _iter_axis_label_sorts(node: object, path: str = ""):
