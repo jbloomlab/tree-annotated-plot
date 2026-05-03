@@ -145,6 +145,98 @@ def test_scale_bar_layer_appears_in_tree_panel() -> None:
     assert n_on > n_off
 
 
+def test_scale_bar_is_centered_on_branch_range() -> None:
+    """The bar's branch-axis midpoint should sit at (branch_min + branch_max)/2,
+    not at branch_min (which would push a wide text label off the panel)."""
+    out = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+    )
+    # Find the bar layer's data — it's the only layer with "x2" set to a
+    # branch value (the rule's endpoint).
+    found_bar = None
+    for ds_name, ds_rows in out.to_dict().get("datasets", {}).items():
+        if isinstance(ds_rows, list) and len(ds_rows) == 1:
+            row = ds_rows[0]
+            if isinstance(row, dict) and {"x", "x2"}.issubset(row):
+                found_bar = row
+                break
+    assert found_bar is not None, "couldn't find scale-bar data row"
+    # Tree branch range on the fixture is [0, 0.04] → midpoint 0.02.
+    midpoint = (found_bar["x"] + found_bar["x2"]) / 2
+    assert midpoint == pytest.approx((0.0 + 0.04) / 2, abs=1e-9)
+
+
+def test_scale_bar_text_rotates_in_horizontal_layout() -> None:
+    """For horizontal layout (strain on x), the bar is vertical, so the
+    text should be rotated to read parallel to it."""
+    df = pd.DataFrame({"strain": ["A", "B", "C", "D"], "titer": [1.0, 2.0, 4.0, 8.0]})
+    horiz_chart = (
+        alt.Chart(df)
+        .mark_circle()
+        .encode(x=alt.X("strain:N"), y="titer:Q")
+        .properties(width=200, height=200)
+    )
+    out = tap.plot(
+        _auspice(),
+        horiz_chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+    )
+    # Walk for any text-mark layer and check its angle.
+    found_angles = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            mark = node.get("mark")
+            if isinstance(mark, dict) and mark.get("type") == "text":
+                if "angle" in mark:
+                    found_angles.append(mark["angle"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(out.to_dict())
+    assert (
+        270 in found_angles
+    ), f"expected at least one text mark with angle=270, got {found_angles}"
+
+
+def test_scale_bar_text_not_rotated_in_vertical_layout() -> None:
+    """For vertical layout the bar is horizontal so the text should be
+    horizontal too (no angle attribute, or angle=0)."""
+    out = tap.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        scale_bar=True,
+    )
+    found_angles = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            mark = node.get("mark")
+            if isinstance(mark, dict) and mark.get("type") == "text":
+                found_angles.append(mark.get("angle", 0))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(out.to_dict())
+    assert all(
+        a in (0, None) for a in found_angles
+    ), f"expected unrotated text in vertical layout, got angles={found_angles}"
+
+
 def test_scale_bar_label_uses_branch_length_units_for_div() -> None:
     """The bar's text label is a one-row DataFrame altair hoists to a
     top-level `datasets` block. Grep the serialized spec for the unit

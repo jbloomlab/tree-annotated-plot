@@ -1062,6 +1062,7 @@ def _format_scale_bar_label(
 def _build_scale_bar_layer(
     *,
     branch_min: float,
+    branch_max: float,
     bar_length: float,
     n_tips: int,
     extra_units: float,
@@ -1071,21 +1072,36 @@ def _build_scale_bar_layer(
     """Build a 2-layer (bar rule + text) chart for the scale bar.
 
     The bar lives in the extra tip-axis strip past the last tip, parallel
-    to the branch axis. branch_min..branch_min+bar_length defines the
-    bar's branch-axis extent. The bar/text data uses the same column
-    names as `_tree.segments` ("x" for branch values, "y" for tip values)
-    so it shares scales with the rest of the tree's layers.
+    to the branch axis, and is **centered on the branch range** so the
+    text label (which is typically wider than the bar) doesn't overflow
+    the tree panel's edge.
+
+    For vertical layouts (strain on y) the text is horizontal, placed
+    just below the bar. For horizontal layouts (strain on x) the bar is
+    vertical and the text is rotated 270° so it reads bottom-to-top,
+    parallel to the bar.
+
+    The bar/text data uses the same column names as `_tree.segments`
+    ("x" for branch values, "y" for tip values) so it shares scales with
+    the rest of the tree's layers.
     """
-    bar_tip_pos = n_tips - 0.5 + extra_units * 0.35
-    text_tip_pos = n_tips - 0.5 + extra_units * 0.78
-    bar_b_start = branch_min
-    bar_b_end = branch_min + bar_length
-    bar_b_mid = (bar_b_start + bar_b_end) / 2
+    # Positions inside the extra tip-axis strip. Tightened from the
+    # earlier 0.35 / 0.78 split: text now sits ~7 px below the bar in
+    # vertical mode (or ~7 px past it in horizontal mode).
+    bar_tip_pos = n_tips - 0.5 + extra_units * 0.20
+    text_tip_pos = n_tips - 0.5 + extra_units * 0.45
+
+    # Center the bar on the branch range (was anchored at branch_min,
+    # which left long text labels hanging past the panel edge).
+    branch_mid = (branch_min + branch_max) / 2
+    bar_b_start = branch_mid - bar_length / 2
+    bar_b_end = branch_mid + bar_length / 2
 
     bar_df = pd.DataFrame([{"x": bar_b_start, "x2": bar_b_end, "y": bar_tip_pos}])
-    text_df = pd.DataFrame([{"x": bar_b_mid, "y": text_tip_pos, "label": label}])
+    text_df = pd.DataFrame([{"x": branch_mid, "y": text_tip_pos, "label": label}])
 
     if strain_axis == "y":
+        # Bar horizontal across the branch axis; text horizontal below it.
         bar = (
             alt.Chart(bar_df)
             .mark_rule(strokeWidth=2.0, color="black")
@@ -1097,6 +1113,9 @@ def _build_scale_bar_layer(
             .encode(x="x:Q", y="y:Q", text="label:N")
         )
     else:
+        # Bar vertical along the branch axis; text rotated to read
+        # parallel to the bar (270° = bottom-to-top), centered on its
+        # anchor so it sits next to the bar without overlapping.
         bar = (
             alt.Chart(bar_df)
             .mark_rule(strokeWidth=2.0, color="black")
@@ -1104,7 +1123,7 @@ def _build_scale_bar_layer(
         )
         text = (
             alt.Chart(text_df)
-            .mark_text(fontSize=10, align="center", baseline="top")
+            .mark_text(fontSize=10, align="center", baseline="middle", angle=270)
             .encode(y="x:Q", x="y:Q", text="label:N")
         )
     return bar + text
@@ -1175,6 +1194,7 @@ def _build_tree_chart(
         )
         scale_bar_layer = _build_scale_bar_layer(
             branch_min=branch_min,
+            branch_max=branch_max,
             bar_length=bar_length,
             n_tips=n_tips,
             extra_units=extra_units,
