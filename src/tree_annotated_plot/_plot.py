@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import re
+import warnings
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +14,9 @@ import altair as alt
 import pandas as pd
 
 from . import _tree
+
+# Accepted chart input forms for the public `plot` function.
+ChartInput = alt.TopLevelMixin | str | Path | dict
 
 # Type for an axis hit found by _find_strain_encoding: (path, encoding_dict, channel).
 # `path` is a tuple of dict keys / list indices that locates `encoding_dict`
@@ -19,11 +26,12 @@ _AxisHit = tuple[tuple, dict, str]
 
 def plot(
     tree: str | Path | dict | _tree.TreeNode,
-    chart: alt.TopLevelMixin,
+    chart: ChartInput,
     *,
     chart_strain_field: str,
     tree_strain_field: str,
     tree_width: int = 100,
+    strict_version: bool = True,
 ) -> alt.HConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`.
 
@@ -36,11 +44,12 @@ def plot(
         Auspice JSON path, dict, or a pre-parsed :class:`TreeNode`. If a path
         or dict, it is parsed with the same `tree_strain_field` value.
     chart
-        An Altair chart whose strain encoding (on `x` or `y`) references
-        `chart_strain_field`. May be a `Chart`, `LayerChart`, `FacetChart`,
-        `HConcatChart`, `VConcatChart`, or `ConcatChart`. The strain encoding
-        may also appear on secondary channels (color, tooltip, etc.) — those
-        are passed through untouched.
+        Either a live Altair chart (`Chart`, `LayerChart`, `FacetChart`,
+        `HConcatChart`, `VConcatChart`, `ConcatChart`), a path to a saved
+        Vega-Lite JSON (`*.json`) or HTML (`*.html`), or an already-parsed
+        spec `dict`. Whichever form, the chart must encode `chart_strain_field`
+        on `x` or `y`. Secondary encodings (color, tooltip, etc.) on the same
+        field are passed through untouched.
     chart_strain_field
         Required. The data-column name the chart's strain axis encodes (e.g.
         `"strain"` or `"axis_label"`).
@@ -52,6 +61,13 @@ def plot(
         accepted.
     tree_width
         Width in pixels of the tree panel.
+    strict_version
+        When True (default) the package raises `ValueError` if the chart
+        spec's `$schema` URL identifies Vega-Lite 5 or earlier, or if the
+        Auspice JSON's top-level `version` is not `v2`. With `False`, both
+        cases become `warnings.warn` and parsing proceeds. The flag has no
+        effect on a live `alt.Chart` (the constructing altair version is
+        necessarily the running altair version).
 
     Returns
     -------
@@ -60,11 +76,12 @@ def plot(
         Horizontal layout (strain on x → tree on top) is added in a later
         phase.
     """
-    root = _ensure_tree(tree, tree_strain_field)
+    root = _ensure_tree(tree, tree_strain_field, strict_version=strict_version)
     tip_list = _tree.layout(root)
     tip_names = [t.name for t in tip_list]
 
-    spec = chart.to_dict() if isinstance(chart, alt.TopLevelMixin) else dict(chart)
+    chart = _load_chart(chart, strict_version=strict_version)
+    spec = chart.to_dict()
 
     axis_hits = _find_strain_encoding(spec, chart_strain_field)
     axis = axis_hits[0][2]
@@ -100,10 +117,168 @@ def plot(
 def _ensure_tree(
     tree: str | Path | dict | _tree.TreeNode,
     tree_strain_field: str,
+    *,
+    strict_version: bool,
 ) -> _tree.TreeNode:
     if isinstance(tree, _tree.TreeNode):
         return tree
-    return _tree.load_auspice(tree, tree_strain_field=tree_strain_field)
+    return _tree.load_auspice(
+        tree,
+        tree_strain_field=tree_strain_field,
+        strict_version=strict_version,
+    )
+
+
+# ---------- chart loading (JSON / HTML / dict / live altair) ----------
+
+
+def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLevelMixin:
+    """Convert any supported chart input into a live Altair chart.
+
+    A live `alt.TopLevelMixin` is returned as-is — its `$schema` is
+    irrelevant since the constructing altair version is necessarily the
+    running altair version. For dict / JSON path / HTML path inputs we run
+    the Vega-Lite version check (under `strict_version`), strip altair's
+    `params[].views` round-trip annotations, and then dispatch to the right
+    chart subclass via `alt.Chart.from_dict(...)`.
+    """
+    if isinstance(chart_input, alt.TopLevelMixin):
+        return chart_input
+
+    if isinstance(chart_input, dict):
+        spec = chart_input
+    elif isinstance(chart_input, (str, Path)):
+        path = Path(chart_input)
+        suffix = path.suffix.lower()
+        if suffix == ".json":
+            with path.open() as f:
+                spec = json.load(f)
+        elif suffix == ".html":
+            spec = _extract_spec_from_html(path.read_text())
+        else:
+            raise ValueError(
+                f"unsupported chart file extension {suffix!r} for {path}; "
+                "expected .json or .html"
+            )
+    else:
+        raise TypeError(
+            "chart must be a live Altair chart, a path (str / pathlib.Path) "
+            "to a .json or .html file, or a parsed spec dict; got "
+            f"{type(chart_input).__name__}"
+        )
+
+    _check_chart_schema_version(spec, strict_version=strict_version)
+    spec = copy.deepcopy(spec)
+    _strip_params_views(spec)
+    # `from_dict` with validate=True dispatches to the right subclass
+    # (Chart / LayerChart / FacetChart / HConcatChart / VConcatChart /
+    # ConcatChart) based on the spec's shape.
+    return alt.Chart.from_dict(spec)
+
+
+def _check_chart_schema_version(spec: dict, *, strict_version: bool) -> None:
+    """Inspect spec['$schema']; raise / warn if it identifies Vega-Lite 5
+    or earlier."""
+    schema = spec.get("$schema")
+    if not isinstance(schema, str) or not schema:
+        warnings.warn(
+            "chart spec has no $schema field; proceeding but the spec may "
+            "have been saved by an older altair version with a different "
+            "shape than this package expects.",
+            stacklevel=3,
+        )
+        return
+    m = re.search(r"vega-lite/v(\d+)", schema)
+    if m is None:
+        warnings.warn(
+            f"chart $schema={schema!r} does not look like a Vega-Lite "
+            "schema URL; proceeding but the spec may not be a Vega-Lite "
+            "chart.",
+            stacklevel=3,
+        )
+        return
+    major = int(m.group(1))
+    if major < 6:
+        msg = (
+            f"chart spec was saved with Vega-Lite {major} (likely altair "
+            f"{major - 1}); please re-save it from an altair 6+ "
+            "environment with `chart.save(...)`."
+        )
+        if strict_version:
+            raise ValueError(msg)
+        warnings.warn(msg, stacklevel=3)
+
+
+def _strip_params_views(spec: Any) -> None:
+    """Recursively delete `views` from every params[] entry.
+
+    altair's `to_dict()` annotates each selection-param with the views it's
+    bound to, but altair's own `from_dict()` validation rejects the field.
+    Stripping is safe: the renderer rebinds params to views on its own.
+    """
+    if isinstance(spec, dict):
+        params = spec.get("params")
+        if isinstance(params, list):
+            for p in params:
+                if isinstance(p, dict):
+                    p.pop("views", None)
+        for v in spec.values():
+            _strip_params_views(v)
+    elif isinstance(spec, list):
+        for item in spec:
+            _strip_params_views(item)
+
+
+class _ScriptCollector(HTMLParser):
+    """Collect the text content of every <script> tag in an HTML document."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scripts: list[str] = []
+        self._in_script = False
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag == "script":
+            self._in_script = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._in_script = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_script:
+            self.scripts.append(data)
+
+
+def _extract_spec_from_html(html: str) -> dict:
+    """Pull the Vega-Lite spec dict out of an altair-saved HTML page.
+
+    altair's default `to_html()` template emits a `var spec = {...};` line
+    inside a `<script>` tag whose value is a json.dumps of the spec. We
+    locate that line via stdlib `html.parser` (no regex on the document)
+    and use `json.JSONDecoder.raw_decode` to do brace-balancing on the
+    JSON literal (no regex on the JSON either).
+
+    Limits: works on the default altair template. If the user passed
+    `chart.save(template=...)` with a custom template, this raises with a
+    remediation message pointing at JSON. A page with multiple `var spec`
+    blocks: we return the first one and document this as a known limit.
+    """
+    parser = _ScriptCollector()
+    parser.feed(html)
+    decoder = json.JSONDecoder()
+    for script in parser.scripts:
+        i = script.find("var spec")
+        if i == -1:
+            continue
+        brace = script.index("{", i)
+        spec, _ = decoder.raw_decode(script, brace)
+        return spec
+    raise ValueError(
+        "no `var spec = {...}` block found in the HTML; this is likely a "
+        "non-default altair template. Re-save the chart as JSON: "
+        "chart.save('foo.json')."
+    )
 
 
 # ---------- chart spec introspection ----------

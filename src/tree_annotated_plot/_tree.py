@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
@@ -38,6 +39,7 @@ def load_auspice(
     source: str | Path | dict,
     *,
     tree_strain_field: str,
+    strict_version: bool = True,
 ) -> TreeNode:
     """Load an Auspice JSON tree from a path or dict.
 
@@ -50,6 +52,11 @@ def load_auspice(
         ``"name"`` selects the tip's top-level ``name`` field; any other value
         ``X`` selects ``node_attrs[X]`` (auto-unwrapping the Auspice
         ``{"value": ...}`` convention). Dotted paths are not accepted.
+    strict_version
+        When True (default), raise ``ValueError`` if the Auspice JSON's
+        top-level ``version`` field does not start with ``"v2"``. With
+        ``False`` the same case becomes a ``warnings.warn``. A missing
+        ``version`` field always warns and proceeds.
     """
     _validate_tree_strain_field(tree_strain_field)
 
@@ -61,9 +68,31 @@ def load_auspice(
     else:
         raise ValueError(f"unsupported tree source type: {type(source).__name__}")
 
+    _check_auspice_version(data, strict_version=strict_version)
+
     if "tree" not in data:
         raise ValueError("Auspice JSON must have a top-level 'tree' field")
     return _parse_node(data["tree"], tree_strain_field)
+
+
+def _check_auspice_version(data: dict, *, strict_version: bool) -> None:
+    """Inspect the Auspice top-level `version`; raise / warn on non-v2."""
+    version = data.get("version")
+    if version is None:
+        warnings.warn(
+            "Auspice JSON has no top-level 'version' field; proceeding, but "
+            "the structure is assumed to be Auspice v2.",
+            stacklevel=3,
+        )
+        return
+    if not isinstance(version, str) or not version.startswith("v2"):
+        msg = (
+            f"Auspice JSON has version={version!r}; this package only "
+            "supports v2. Regenerate the tree with a current Augur version."
+        )
+        if strict_version:
+            raise ValueError(msg)
+        warnings.warn(msg, stacklevel=3)
 
 
 def _validate_tree_strain_field(tree_strain_field: str) -> None:
