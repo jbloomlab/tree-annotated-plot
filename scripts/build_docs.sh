@@ -10,11 +10,18 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VENV_MKDOCS=".venv/bin/mkdocs"
-if [[ ! -x "$VENV_MKDOCS" ]]; then
-    echo "scripts/build_docs.sh: $VENV_MKDOCS not found." >&2
+VENV_PYTHON=".venv/bin/python"
+if [[ ! -x "$VENV_MKDOCS" || ! -x "$VENV_PYTHON" ]]; then
+    echo "scripts/build_docs.sh: $VENV_MKDOCS or $VENV_PYTHON not found." >&2
     echo "Install docs deps: .venv/bin/pip install -e '.[docs]'" >&2
     exit 2
 fi
+
+# Render the chart assets (docs/images/*.png + docs/charts/*.html) the
+# docs pages embed. Both directories are gitignored; this script is the
+# only thing that should write to them.
+echo "==> generate_docs_assets.py"
+"$VENV_PYTHON" scripts/generate_docs_assets.py
 
 echo "==> mkdocs build --strict"
 "$VENV_MKDOCS" build --strict

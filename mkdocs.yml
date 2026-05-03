@@ -5,6 +5,13 @@ site_description: >
 repo_url: https://github.com/jbloomlab/tree-annotated-plot
 edit_uri: ""
 
+# Emit `python-api.html` rather than `python-api/index.html`, so the
+# built site works when opened directly via `file://` (no local web
+# server required). MkDocs's default "directory URLs" rely on a server
+# to resolve `python-api/` → `python-api/index.html`, which fails on
+# the filesystem and breaks the inter-page links from the Home page.
+use_directory_urls: false
+
 theme:
   name: material
   features:

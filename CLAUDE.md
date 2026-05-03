@@ -54,4 +54,30 @@
   scripts/build_docs.sh
   ```
   `--strict` mode catches broken mkdocstrings references and missing
-  cross-links.
+  cross-links. The script first calls
+  `scripts/generate_docs_assets.py` to render `docs/images/*.png`
+  and `docs/charts/*.html` from the example modules; both
+  directories are **gitignored** — never commit anything into them.
+  The same asset script runs in CI before `mkdocs build`.
+- **Docs are auto-deployed**. The
+  [`.github/workflows/docs.yml`](.github/workflows/docs.yml)
+  workflow runs on every push to `main`, generates assets, builds
+  with `mkdocs build --strict`, and deploys to GitHub Pages
+  (https://jbloomlab.github.io/tree-annotated-plot/). Pages source
+  must be set to "GitHub Actions" in repo Settings; the workflow's
+  `permissions:` block already declares `pages: write` and
+  `id-token: write` so no further config is needed.
+- **Adding a new example** (full recipe in `README.md`):
+  1. Self-contained module under `examples/` with module-level
+     helpers (callable from outside).
+  2. New clause in `scripts/generate_docs_assets.py` that produces a
+     `.png` (into `docs/images/`) + `.html` (into `docs/charts/`).
+  3. New section in `docs/examples.md` matching the existing
+     three-section template (motivation → code → embedded PNG +
+     interactive link → reproduce).
+  4. `scripts/build_docs.sh` confirms the page renders.
+- **Iterating on docs**: prefer `mkdocs serve` (live-reload local
+  server) for content/layout changes — much faster than
+  `build_docs.sh` and shows the actual rendered page in your
+  browser. Use `build_docs.sh` for the strict pre-commit
+  verification.

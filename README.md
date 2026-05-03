@@ -53,14 +53,57 @@ tree-annotated-plot \
 
 ## Documentation
 
-Full API reference + CLI reference + worked examples:
+The canonical reference is the docs site at
+[https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/).
+It's auto-deployed by GitHub Actions on every push to `main` —
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) installs
+the package + docs extras, runs
+[`scripts/generate_docs_assets.py`](scripts/generate_docs_assets.py)
+to render PNG screenshots and standalone interactive HTML for each
+example, then `mkdocs build --strict`, and uploads `site/` as a
+GitHub Pages artifact.
+
+### Building locally
+
+For day-to-day editing of the docs, use MkDocs's live-reload server
+(saves go straight to your browser):
 
 ```bash
-.venv/bin/pip install -e ".[docs]"
-.venv/bin/mkdocs serve
+pip install -e ".[docs]"
+mkdocs serve              # http://localhost:8000
 ```
 
-See `docs/` for the source.
+For the strict build that matches CI (catches broken
+[`mkdocstrings`](https://mkdocstrings.github.io/) refs, missing
+images, unresolved cross-links):
+
+```bash
+bash scripts/build_docs.sh
+```
+
+This first runs `scripts/generate_docs_assets.py` (so the example
+PNGs and interactive HTMLs exist before MkDocs reads `docs/`), then
+`mkdocs build --strict`. Output lands in `site/`.
+
+### Adding a new example
+
+The docs follow a single template per example: a short motivation,
+a code excerpt, an embedded PNG screenshot, a link to the
+fully-interactive standalone HTML, and the commands to reproduce.
+[`docs/examples.md`](docs/examples.md) shows the existing shape. To
+add another:
+
+1. Drop a runnable script into `examples/`. Keep helpers at module
+   level (callable from outside) so the asset script can import them.
+2. Add a clause to `scripts/generate_docs_assets.py` that imports
+   the script and calls `tap.plot(...)` followed by saving both
+   `<name>.png` (into `docs/images/`) and `<name>.html` (into
+   `docs/charts/`). Both directories are gitignored — only the
+   asset script writes there.
+3. Add a section to `docs/examples.md` matching the template.
+4. Run `bash scripts/build_docs.sh` and open `site/examples.html`
+   to verify. Push when happy; the deployed site updates on the
+   next CI run.
 
 ## Installation (development)
 

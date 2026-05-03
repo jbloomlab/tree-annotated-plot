@@ -4,5 +4,7 @@
 *.out
 examples/data/
 site/
+docs/images/
+docs/charts/
 __pycache__/
 *.pyc
