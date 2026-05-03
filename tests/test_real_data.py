@@ -226,22 +226,26 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
     assert isinstance(out, alt.HConcatChart)
     assert len(out.hconcat) == 2
 
-    # The chart panel (right) should carry a sort that matches the tree's
-    # tip order at every encoding referencing axis_label.
-    out_dict = out.to_dict()
-    inner = out_dict["hconcat"][1]
-    found_sort = _find_axis_label_sort(inner)
-    assert found_sort is not None
-    assert len(found_sort) == 54
-
-    # The new order should match the depth-first tip order of the loaded tree.
+    # The H3N2 chart's body is a LayerChart with two layers, each of which
+    # has its own y-encoding referencing axis_label. The walker MUST update
+    # both — if it only modifies the first, Vega-Lite's shared-axis behavior
+    # might still render correctly and a single-encoding test would miss the
+    # regression. Walk every axis_label encoding in the output and require
+    # all of them carry the tree's tip order.
     with auspice.open() as f:
         tree_json = json.load(f)
-    tree_tip_order = _depth_first_haplotypes(tree_json["tree"])
-    assert found_sort == tree_tip_order, (
-        "chart sort does not match tree tip order; "
-        f"first 5 expected={tree_tip_order[:5]}, got={found_sort[:5]}"
+    expected_order = _depth_first_haplotypes(tree_json["tree"])
+
+    out_sorts = list(_iter_axis_label_sorts(out.to_dict()["hconcat"][1]))
+    assert len(out_sorts) == 2, (
+        f"expected 2 axis_label encodings in the H3N2 output (one per "
+        f"LayerChart layer), got {len(out_sorts)}"
     )
+    for path, sort in out_sorts:
+        assert sort == expected_order, (
+            f"sort at {path} does not match tree tip order; "
+            f"first 5 expected={expected_order[:5]}, got={sort[:5] if sort else None}"
+        )
 
 
 def test_h1n1_horizontal_layout_currently_unsupported() -> None:
@@ -265,6 +269,24 @@ def test_h1n1_horizontal_layout_currently_unsupported() -> None:
             tree_strain_field="derived_haplotype",
             tree_width=140,
         )
+
+
+def _iter_axis_label_sorts(node: object, path: str = ""):
+    """Yield (path, sort) for every axis_label x/y encoding in `node`.
+
+    Used by the end-to-end real-data test to verify that *every* layer's
+    sort got updated, not just the first one a depth-first search hits.
+    """
+    if isinstance(node, dict):
+        for axis in ("y", "x"):
+            enc = node.get(axis)
+            if isinstance(enc, dict) and enc.get("field") == "axis_label":
+                yield f"{path}.{axis}", enc.get("sort")
+        for k, v in node.items():
+            yield from _iter_axis_label_sorts(v, f"{path}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _iter_axis_label_sorts(v, f"{path}[{i}]")
 
 
 def _depth_first_haplotypes(node: dict) -> list[str]:
