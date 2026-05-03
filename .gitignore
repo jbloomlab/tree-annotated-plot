@@ -3,5 +3,6 @@
 /_*
 *.out
 examples/data/
+site/
 __pycache__/
 *.pyc

@@ -1,0 +1,55 @@
+site_name: tree-annotated-plot
+site_description: >
+  Plot a phylogenetic tree alongside an Altair / Vega-Lite chart whose
+  categorical axis is reordered to match the tree's tip order.
+repo_url: https://github.com/jbloomlab/tree-annotated-plot
+edit_uri: ""
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - scheme: default
+      primary: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Python API: python-api.md
+  - Command line: cli.md
+  - Examples: examples.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
+            heading_level: 2
+
+markdown_extensions:
+  - admonition
+  - mkdocs-click
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - toc:
+      permalink: true
