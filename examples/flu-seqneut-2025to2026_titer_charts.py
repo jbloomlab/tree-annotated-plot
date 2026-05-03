@@ -346,9 +346,21 @@ def make_chart(
         else f"median (points) and per-serum (lines) titers for {subtype} strains"
     )
 
+    # For the horizontal layout (chart_type="lines", H1N1), the strain labels
+    # render at the bottom of the faceted chart. Putting the cohort legend
+    # ABOVE the faceted chart keeps the strain labels at the bottom edge of
+    # the saved chart — so when this package's tap.plot vconcats a tree
+    # underneath, the tree's tips end up flush with the strain labels.
+    # For the vertical layout (H3N2), the strain labels are on the left
+    # of the faceted chart and the legend's vertical position doesn't
+    # affect tree alignment, so we keep the legend below.
+    if vertical:
+        body = alt.vconcat(faceted, dummy_cohort, spacing=1)
+    else:
+        body = alt.vconcat(dummy_cohort, faceted, spacing=1)
+
     return (
-        alt.vconcat(faceted, dummy_cohort, spacing=1)
-        .resolve_scale(fill="independent")
+        body.resolve_scale(fill="independent")
         .configure_axis(
             grid=False,
             titleFontWeight="normal",
