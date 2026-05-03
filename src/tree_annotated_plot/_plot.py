@@ -31,6 +31,7 @@ def plot(
     chart_strain_field: str,
     tree_strain_field: str,
     tree_width: int = 100,
+    prune_tree_to_chart: bool = False,
     strict_version: bool = True,
 ) -> alt.HConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`.
@@ -61,6 +62,13 @@ def plot(
         accepted.
     tree_width
         Width in pixels of the tree panel.
+    prune_tree_to_chart
+        When False (default), tree tips not present in the chart's strain
+        set are a fatal error. When True, those tips (and any internal
+        nodes whose subtrees become empty) are dropped before drawing,
+        with single-child internals collapsed into their kept child. Chart
+        strains not present in the tree are *always* fatal regardless of
+        this flag — pruning would silently lose plot data.
     strict_version
         When True (default) the package raises `ValueError` if the chart
         spec's `$schema` URL identifies Vega-Lite 5 or earlier, or if the
@@ -80,6 +88,8 @@ def plot(
     tip_list = _tree.layout(root)
     tip_names = [t.name for t in tip_list]
 
+    _check_no_duplicate_tip_strains(tip_names, tree_strain_field=tree_strain_field)
+
     chart = _load_chart(chart, strict_version=strict_version)
     spec = chart.to_dict()
 
@@ -95,7 +105,21 @@ def plot(
         )
 
     chart_strains = _extract_chart_strains(spec, axis_hits, chart_strain_field)
-    _check_strain_match(tip_names, chart_strains)
+
+    _reconcile_tips_and_strains(
+        tree_strains=tip_names,
+        chart_strains=chart_strains,
+        chart_strain_field=chart_strain_field,
+        tree_strain_field=tree_strain_field,
+        prune_tree_to_chart=prune_tree_to_chart,
+        chart_spec=spec,
+        tree_source=tree,
+    )
+
+    if prune_tree_to_chart and (set(tip_names) - set(chart_strains)):
+        root = _tree._prune_tree_to(root, set(chart_strains))
+        tip_list = _tree.layout(root)
+        tip_names = [t.name for t in tip_list]
 
     height = _coerce_dim(
         _chart_strain_dim(spec, axis_hits, axis), n_tips=len(tip_names)
@@ -439,19 +463,273 @@ def _extract_field_values_from_spec_data(spec: dict, field: str) -> list[str]:
     return list(dict.fromkeys(seen))
 
 
-def _check_strain_match(tip_names: list[str], chart_strains: list[str]) -> None:
-    tip_set = set(tip_names)
+def _check_no_duplicate_tip_strains(
+    tip_names: list[str], *, tree_strain_field: str
+) -> None:
+    """Tip identifiers must be unique under the chosen `tree_strain_field`."""
+    if len(set(tip_names)) == len(tip_names):
+        return
+    from collections import Counter
+
+    dups = sorted(s for s, c in Counter(tip_names).items() if c > 1)
+    raise ValueError(
+        f"tree_strain_field={tree_strain_field!r} resolves to duplicate "
+        f"values across tips: {dups[:10]}. Each tip must have a unique "
+        "strain identifier; either pick a different tree_strain_field or "
+        "fix the underlying tree."
+    )
+
+
+def _reconcile_tips_and_strains(
+    *,
+    tree_strains: list[str],
+    chart_strains: list[str],
+    chart_strain_field: str,
+    tree_strain_field: str,
+    prune_tree_to_chart: bool,
+    chart_spec: dict,
+    tree_source: Any,
+) -> None:
+    """Verify tree strains and chart strains are reconcilable.
+
+    Three asymmetries:
+      - chart strains not in tree → always fatal.
+      - tree tips not in chart → fatal unless `prune_tree_to_chart=True`.
+      - (duplicate tree_strain_field values across tips → handled by the
+        separate `_check_no_duplicate_tip_strains`.)
+
+    On any fatal asymmetry, raises `ValueError` with a multi-line message
+    that includes sample values from both sides and any candidate-field
+    suggestions whose values overlap heavily with the other side.
+    """
+    tree_set = set(tree_strains)
     chart_set = set(chart_strains)
-    missing_in_chart = tip_set - chart_set
-    missing_in_tree = chart_set - tip_set
-    if missing_in_chart or missing_in_tree:
-        raise ValueError(
-            "strain set mismatch between tree tips and chart strains:\n"
-            f"  tips not in chart ({len(missing_in_chart)}): "
-            f"{sorted(missing_in_chart)[:10]}\n"
-            f"  chart strains not in tree ({len(missing_in_tree)}): "
-            f"{sorted(missing_in_tree)[:10]}"
+    chart_minus_tree = chart_set - tree_set
+    tree_minus_chart = tree_set - chart_set
+
+    if not chart_minus_tree and (not tree_minus_chart or prune_tree_to_chart):
+        return
+
+    hints = _candidate_field_hints(
+        chart_spec=chart_spec,
+        chart_strain_field=chart_strain_field,
+        tree_strains=tree_strains,
+        tree_source=tree_source,
+        tree_strain_field=tree_strain_field,
+        chart_strains=chart_strains,
+    )
+    raise ValueError(
+        _format_strain_mismatch(
+            chart_strain_field=chart_strain_field,
+            tree_strain_field=tree_strain_field,
+            chart_strains=chart_strains,
+            tree_strains=tree_strains,
+            chart_minus_tree=chart_minus_tree,
+            tree_minus_chart=tree_minus_chart,
+            prune_tree_to_chart=prune_tree_to_chart,
+            hints=hints,
         )
+    )
+
+
+def _format_strain_mismatch(
+    *,
+    chart_strain_field: str,
+    tree_strain_field: str,
+    chart_strains: list[str],
+    tree_strains: list[str],
+    chart_minus_tree: set[str],
+    tree_minus_chart: set[str],
+    prune_tree_to_chart: bool,
+    hints: list[str],
+) -> str:
+    parts: list[str] = []
+    if chart_minus_tree:
+        parts.append(
+            f"{len(chart_minus_tree)} chart strain(s) are not present in the "
+            "tree (these would be silently dropped if we pruned, so this is "
+            "always fatal)."
+        )
+    if tree_minus_chart and not prune_tree_to_chart:
+        parts.append(
+            f"{len(tree_minus_chart)} tree tip(s) are not present in the "
+            "chart. Pass `prune_tree_to_chart=True` to drop them automatically."
+        )
+    parts.append("")
+    parts.append(
+        f"Tried: chart_strain_field={chart_strain_field!r}, "
+        f"tree_strain_field={tree_strain_field!r}"
+    )
+    parts.append("Sample chart_strain_field values: " f"{sorted(chart_strains)[:5]}")
+    parts.append("Sample tree_strain_field values:  " f"{sorted(tree_strains)[:5]}")
+    if chart_minus_tree:
+        parts.append(f"Sample chart-only values: {sorted(chart_minus_tree)[:5]}")
+    if tree_minus_chart and not prune_tree_to_chart:
+        parts.append(f"Sample tree-only values:  {sorted(tree_minus_chart)[:5]}")
+    if hints:
+        parts.append("")
+        parts.append("Possible alternatives:")
+        for h in hints:
+            parts.append(f"  - {h}")
+    return "\n".join(parts)
+
+
+def _candidate_field_hints(
+    *,
+    chart_spec: dict,
+    chart_strain_field: str,
+    tree_strains: list[str],
+    tree_source: Any,
+    tree_strain_field: str,
+    chart_strains: list[str],
+) -> list[str]:
+    """Return human-readable hints suggesting alternative strain fields.
+
+    Scans:
+      - chart side: every column appearing in inline / named data of the
+        spec. For each, fraction of values that are in tree_strains.
+      - tree side: every node_attrs key on tips, plus the literal "name"
+        (top-level Auspice tip ID). For each, fraction of values that are
+        in chart_strains. Skipped if `tree_source` is a parsed TreeNode
+        rather than a path/dict (we'd have no original Auspice JSON to
+        introspect).
+
+    Threshold: 50% overlap. Tunable; lower threshold trades fewer
+    false-negatives for more false-positives in the hint.
+    """
+    OVERLAP_THRESHOLD = 0.5
+    hints: list[str] = []
+    tree_set = set(tree_strains)
+    chart_set = set(chart_strains)
+
+    if tree_set:
+        for field_name, values in _enumerate_chart_data_columns(chart_spec):
+            if field_name == chart_strain_field:
+                continue
+            distinct = set(values)
+            if not distinct:
+                continue
+            overlap = len(distinct & tree_set)
+            if overlap / len(tree_set) >= OVERLAP_THRESHOLD:
+                hints.append(
+                    f"the chart has a field {field_name!r} whose values "
+                    f"match {overlap}/{len(tree_set)} tree strains — did "
+                    f"you mean chart_strain_field={field_name!r}?"
+                )
+
+    tree_dict = _tree_source_as_dict(tree_source)
+    if chart_set and tree_dict is not None and "tree" in tree_dict:
+        for attr, values in _enumerate_tree_tip_attrs(tree_dict["tree"]):
+            if attr == tree_strain_field:
+                continue
+            distinct = set(values)
+            if not distinct:
+                continue
+            overlap = len(distinct & chart_set)
+            if overlap / len(chart_set) >= OVERLAP_THRESHOLD:
+                hint_lhs = (
+                    "the tree has node `name` field"
+                    if attr == "name"
+                    else f"the tree has node_attrs[{attr!r}]"
+                )
+                hints.append(
+                    f"{hint_lhs} whose values match {overlap}/"
+                    f"{len(chart_set)} chart strains — did you mean "
+                    f"tree_strain_field={attr!r}?"
+                )
+
+    return hints
+
+
+def _enumerate_chart_data_columns(spec: Any) -> list[tuple[str, list]]:
+    """Walk the spec for every column appearing in inline / named data.
+
+    Returns `[(field_name, values), ...]` where `values` is the list of
+    raw values seen for that field across all data rows visited (with
+    duplicates).
+    """
+    datasets = spec.get("datasets", {}) if isinstance(spec, dict) else {}
+    by_field: dict[str, list] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            data = node.get("data")
+            if isinstance(data, dict):
+                rows: list | None = None
+                if "values" in data and isinstance(data["values"], list):
+                    rows = data["values"]
+                elif "name" in data:
+                    name = data["name"]
+                    if isinstance(datasets.get(name), list):
+                        rows = datasets[name]
+                if rows:
+                    for row in rows:
+                        if isinstance(row, dict):
+                            for k, v in row.items():
+                                by_field.setdefault(k, []).append(v)
+            for k, v in node.items():
+                if k in ("data", "datasets"):
+                    continue
+                walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(spec)
+    return list(by_field.items())
+
+
+def _tree_source_as_dict(tree_source: Any) -> dict | None:
+    """Return the original Auspice JSON dict if available, else None.
+
+    We use this for the candidate-field hint on the tree side. If the user
+    passed a pre-parsed `TreeNode`, we can't introspect the original
+    `node_attrs` keys and skip the tree-side hint.
+    """
+    if isinstance(tree_source, dict):
+        return tree_source
+    if isinstance(tree_source, (str, Path)):
+        try:
+            with open(tree_source) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+    return None
+
+
+def _enumerate_tree_tip_attrs(
+    tree_root_dict: dict,
+) -> list[tuple[str, list]]:
+    """Walk an Auspice JSON tree dict and yield (attr, values) per tip-attr.
+
+    Includes a synthetic `"name"` entry for the top-level node `name` field
+    (the canonical Auspice tip identifier, used by `tree_strain_field="name"`).
+    Auspice's `{value: ...}` convention is auto-unwrapped.
+    """
+    by_attr: dict[str, list] = {}
+    names: list = []
+
+    def walk(n: dict) -> None:
+        children = n.get("children")
+        if children:
+            for c in children:
+                walk(c)
+            return
+        nm = n.get("name")
+        if nm is not None:
+            names.append(nm)
+        for k, v in n.get("node_attrs", {}).items():
+            if isinstance(v, dict) and "value" in v:
+                v = v["value"]
+            by_attr.setdefault(k, []).append(v)
+
+    walk(tree_root_dict)
+
+    out: list[tuple[str, list]] = []
+    if names:
+        out.append(("name", names))
+    out.extend(by_attr.items())
+    return out
 
 
 def _apply_tree_order_to_chart_object(

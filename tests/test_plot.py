@@ -111,7 +111,7 @@ def test_plot_overrides_y_sort_to_tree_tip_order():
 def test_plot_strain_mismatch_raises():
     bad = _synthetic_chart()
     bad.data = bad.data.replace({"strain": {"D": "X"}})
-    with pytest.raises(ValueError, match="strain set mismatch"):
+    with pytest.raises(ValueError, match="not present in the"):
         tap.plot(
             _synthetic_auspice(),
             bad,

@@ -150,6 +150,64 @@ def _parse_node(d: dict, tree_strain_field: str) -> TreeNode:
     return TreeNode(name=name, x=float(div), children=children)
 
 
+def _prune_tree_to(root: TreeNode, keep_strains: set[str]) -> TreeNode:
+    """Return a new tree pruned to subtrees whose tips are in `keep_strains`.
+
+    Strict-flavor pruning per the Phase 2 plan:
+      - Drop every tip whose `name` is not in `keep_strains`.
+      - Drop every internal node whose entire subtree was dropped.
+      - Collapse single-child internals: when an internal node has only
+        one surviving child after pruning, the kept child replaces it.
+        Because each `TreeNode.x` is the *absolute* divergence from the
+        original root (not a delta from its parent), no branch-length
+        summation is needed — the kept node's `x` already reflects the
+        correct distance from any further-up ancestor. (For `num_date`
+        once Phase 2h adds it, the same holds: dates are absolute
+        positions.)
+      - Re-root to the LCA of the kept tips: if the original root has
+        only one kept-child path, the recursive case collapses upward
+        until a node with ≥2 surviving subtrees is reached, which becomes
+        the new root.
+
+    Raises ValueError if the resulting tree has no tips (i.e. `keep_strains`
+    didn't overlap any tip's name).
+    """
+    pruned = _prune_recursive(root, keep_strains)
+    if pruned is None:
+        raise ValueError(
+            "after pruning, no tips remain; keep_strains has no overlap "
+            "with the tree's tip names"
+        )
+    return pruned
+
+
+def _prune_recursive(node: TreeNode, keep_strains: set[str]) -> TreeNode | None:
+    """Return a copy of `node` pruned to kept descendants, or None if no
+    descendants are kept.
+
+    Single-child internals are collapsed by returning the surviving child
+    directly — its absolute `x` is preserved, so root-to-tip distances
+    survive unchanged.
+    """
+    if node.is_tip:
+        if node.name in keep_strains:
+            return TreeNode(name=node.name, x=node.x, children=[])
+        return None
+
+    new_children: list[TreeNode] = []
+    for c in node.children:
+        kept = _prune_recursive(c, keep_strains)
+        if kept is not None:
+            new_children.append(kept)
+
+    if not new_children:
+        return None
+    if len(new_children) == 1:
+        # Collapse this single-child internal into its child.
+        return new_children[0]
+    return TreeNode(name=node.name, x=node.x, children=new_children)
+
+
 def tips(root: TreeNode) -> Iterator[TreeNode]:
     """Yield tips of the tree in left-to-right (pre-order) traversal."""
     if root.is_tip:
