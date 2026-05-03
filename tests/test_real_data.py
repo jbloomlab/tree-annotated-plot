@@ -236,7 +236,8 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
         tree_json = json.load(f)
     expected_order = _depth_first_haplotypes(tree_json["tree"])
 
-    out_sorts = list(_iter_axis_label_sorts(out.to_dict()["hconcat"][1]))
+    out_dict = out.to_dict()
+    out_sorts = list(_iter_axis_label_sorts(out_dict["hconcat"][1]))
     assert len(out_sorts) == 2, (
         f"expected 2 axis_label encodings in the H3N2 output (one per "
         f"LayerChart layer), got {len(out_sorts)}"
@@ -246,6 +247,15 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
             f"sort at {path} does not match tree tip order; "
             f"first 5 expected={expected_order[:5]}, got={sort[:5] if sort else None}"
         )
+
+    # Tip alignment: the chart's strain axis is Step(11) on 54 strains, so
+    # the chart's strain-axis body renders at 11 * 54 = 594px (the default
+    # point/band paddingOuter=0.5 puts the first/last items half a step
+    # inside the panel). The tree's tip-axis must match exactly — otherwise
+    # tips don't align with chart rows. Step on a quantitative axis is
+    # ignored by Vega-Lite, so we convert Step(N) on the chart to a fixed
+    # pixel height of N*n_tips on the tree. Pin the contract.
+    assert out_dict["hconcat"][0]["height"] == 11 * 54
 
 
 def test_h1n1_horizontal_layout_currently_unsupported() -> None:

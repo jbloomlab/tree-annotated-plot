@@ -97,7 +97,9 @@ def plot(
     chart_strains = _extract_chart_strains(spec, axis_hits, chart_strain_field)
     _check_strain_match(tip_names, chart_strains)
 
-    height = _coerce_dim(_chart_strain_dim(spec, axis_hits, axis))
+    height = _coerce_dim(
+        _chart_strain_dim(spec, axis_hits, axis), n_tips=len(tip_names)
+    )
     tree_chart = _build_tree_chart(
         root, n_tips=len(tip_names), width=tree_width, height=height
     )
@@ -599,10 +601,24 @@ def _get_at_path(spec: Any, path: tuple) -> Any:
     return cur
 
 
-def _coerce_dim(v: int | float | dict) -> int | float | alt.Step:
-    """Turn a spec dim value into something Altair `properties()` accepts."""
+def _coerce_dim(v: int | float | dict, *, n_tips: int) -> int | float:
+    """Turn the chart's strain-axis dim into a pixel height for the tree.
+
+    `Step(N)` on the chart means the chart's strain-axis body is `N * n_tips`
+    pixels wide/tall (a Vega-Lite point/band scale with the default
+    `paddingOuter=0.5` puts the first/last items half a step inside the
+    panel). We can't pass `Step(N)` straight through to the tree because the
+    tree's tip-axis is *quantitative* — Vega-Lite ignores `Step` on
+    quantitative axes and falls back to a default height. So we convert to
+    fixed pixels here. The tree's y-domain is set to `[-0.5, n_tips - 0.5]`,
+    which positions tip i exactly where row i sits on the chart's point/band
+    scale.
+
+    For an int/float dim the chart used a fixed pixel height; we propagate
+    it directly.
+    """
     if isinstance(v, dict) and "step" in v:
-        return alt.Step(v["step"])
+        return v["step"] * n_tips
     if isinstance(v, (int, float)):
         return v
     raise ValueError(
