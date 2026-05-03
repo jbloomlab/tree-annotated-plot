@@ -150,6 +150,7 @@ def main() -> None:
         chart,
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         tree_size=140,
     )
 

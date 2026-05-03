@@ -105,12 +105,13 @@ def _option_for_field(field: dataclasses.Field, hints: dict) -> Any:
 def _stack_config_options(command: Any) -> Any:
     """Apply one `click.option(...)` per PlotConfig field to `command`.
 
-    Decorators are applied in reverse so the help text lists the fields
-    in declaration order (Click's stacked-option behavior).
+    `click.option(...)` invoked on an already-built `Command` *appends*
+    to `command.params`, so iterating fields in declaration order gives
+    --help in declaration order (required fields first, since
+    `chart_strain_field` and `tree_strain_field` lead PlotConfig).
     """
     hints = get_type_hints(PlotConfig, include_extras=True)
-    fields = list(dataclasses.fields(PlotConfig))
-    for field in reversed(fields):
+    for field in dataclasses.fields(PlotConfig):
         command = _option_for_field(field, hints)(command)
     return command
 

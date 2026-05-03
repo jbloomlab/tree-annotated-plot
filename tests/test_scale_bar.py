@@ -105,6 +105,7 @@ def test_scale_bar_off_default_no_extra_pixels() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     tree_height = out.to_dict()["hconcat"][0]["height"]
     assert tree_height == 200  # matches chart height; no scale-bar margin
@@ -118,6 +119,7 @@ def test_scale_bar_on_extends_tree_panel() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
     )
     tree_height = out.to_dict()["hconcat"][0]["height"]
@@ -132,12 +134,14 @@ def test_scale_bar_layer_appears_in_tree_panel() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     out_on = tap.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
     )
     n_off = len(out_off.to_dict()["hconcat"][0]["layer"])
@@ -153,6 +157,7 @@ def test_scale_bar_is_centered_on_branch_range() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
     )
     # Find the bar layer's data — it's the only layer with "x2" set to a
@@ -185,6 +190,7 @@ def test_scale_bar_text_rotates_in_horizontal_layout() -> None:
         horiz_chart,
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
     )
     # Walk for any text-mark layer and check its angle.
@@ -216,6 +222,7 @@ def test_scale_bar_text_not_rotated_in_vertical_layout() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
     )
     found_angles = []
@@ -248,6 +255,7 @@ def test_scale_bar_label_uses_branch_length_units_for_div() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         scale_bar=True,
         branch_length_units="substitutions/site",
     )

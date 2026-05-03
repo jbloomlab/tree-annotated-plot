@@ -92,6 +92,7 @@ def test_plot_returns_hconcat_with_two_panels():
         _synthetic_chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     assert isinstance(out, alt.HConcatChart)
     assert len(out.hconcat) == 2
@@ -103,6 +104,7 @@ def test_plot_overrides_y_sort_to_tree_tip_order():
         _synthetic_chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     user_panel_spec = out.hconcat[1].to_dict()
     assert user_panel_spec["encoding"]["y"]["sort"] == ["A", "B", "C", "D"]
@@ -117,6 +119,7 @@ def test_plot_strain_mismatch_raises():
             bad,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
         )
 
 
@@ -128,6 +131,7 @@ def test_plot_requires_explicit_height():
             chart,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
         )
 
 
@@ -138,6 +142,7 @@ def test_plot_renders_to_html(tmp_path):
         _synthetic_chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     target = tmp_path / "out.html"
     out.save(str(target))

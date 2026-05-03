@@ -32,7 +32,7 @@ def plot(
     *,
     chart_strain_field: str,
     tree_strain_field: str,
-    branch_length: Literal["div", "num_date"] = "div",
+    branch_length: Literal["div", "num_date"],
     tree_size: int = 100,
     tree_location: TreeLocation | None = None,
     tree_line_width: float = 1.5,
@@ -70,9 +70,11 @@ def plot(
         the Auspice `{"value": ...}` convention). Dotted paths are not
         accepted.
     branch_length
-        Which Auspice node attribute supplies branch lengths. `"div"`
-        (default) reads `node_attrs.div`. `"num_date"` reads
-        `node_attrs.num_date.value`.
+        Required. Which Auspice node attribute supplies branch lengths.
+        `"div"` reads `node_attrs.div` (a scalar absolute divergence
+        from the root). `"num_date"` reads `node_attrs.num_date.value`
+        (calendar position in years). Specifying this explicitly keeps
+        the units of the branch axis unambiguous.
     tree_size
         Size in pixels of the tree's branch axis (the dimension perpendicular
         to the strain rows). For vertical layout (chart strain on `y`) this
@@ -131,11 +133,14 @@ def plot(
         strains not present in the tree are *always* fatal regardless of
         this flag — pruning would silently lose plot data.
     strict_version
-        When True (default) the package raises `ValueError` if the chart
-        spec's `$schema` URL identifies Vega-Lite 5 or earlier, or if the
-        Auspice JSON's top-level `version` is not `v2`. With `False`, both
-        cases become `warnings.warn` and parsing proceeds. The flag has no
-        effect on a live `alt.Chart` (the constructing altair version is
+        Controls how mismatched-version inputs are handled. When `True`
+        (default), known-stale specs raise: Vega-Lite 5 or earlier, and
+        Auspice JSON whose top-level `version` is not `v2`. With `False`,
+        those same cases become `warnings.warn` and parsing proceeds.
+        Vega-Lite *newer* than the package's target version (currently
+        6) is always a warning regardless of this flag — it's untested
+        but Vega-Lite tends to stay backward-compatible. Has no effect
+        on a live `alt.Chart` (the constructing altair version is
         necessarily the running altair version).
 
     Returns
@@ -364,9 +369,24 @@ def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLeve
     return alt.Chart.from_dict(spec)
 
 
+_TARGET_VEGA_LITE_MAJOR = 6
+
+
 def _check_chart_schema_version(spec: dict, *, strict_version: bool) -> None:
-    """Inspect spec['$schema']; raise / warn if it identifies Vega-Lite 5
-    or earlier."""
+    """Inspect spec['$schema'] and react to mismatched Vega-Lite versions.
+
+    Three regimes:
+      - Vega-Lite < 6  → known incompatible. Raises under strict_version
+        (the default); warns under strict_version=False.
+      - Vega-Lite = 6  → the version this package was built against.
+        Silent.
+      - Vega-Lite > 6  → newer than tested. We don't know whether it
+        works, but Vega-Lite tends to be backward-compatible so we
+        proceed and warn (regardless of strict_version). The user can
+        silence the warning via the `warnings` module if needed.
+
+    Missing or unrecognized $schema URLs always warn and proceed.
+    """
     schema = spec.get("$schema")
     if not isinstance(schema, str) or not schema:
         warnings.warn(
@@ -386,15 +406,24 @@ def _check_chart_schema_version(spec: dict, *, strict_version: bool) -> None:
         )
         return
     major = int(m.group(1))
-    if major < 6:
+    if major < _TARGET_VEGA_LITE_MAJOR:
         msg = (
             f"chart spec was saved with Vega-Lite {major} (likely altair "
-            f"{major - 1}); please re-save it from an altair 6+ "
-            "environment with `chart.save(...)`."
+            f"{major - 1}); please re-save it from an altair "
+            f"{_TARGET_VEGA_LITE_MAJOR}+ environment with `chart.save(...)`."
         )
         if strict_version:
             raise ValueError(msg)
         warnings.warn(msg, stacklevel=3)
+    elif major > _TARGET_VEGA_LITE_MAJOR:
+        warnings.warn(
+            f"chart spec was saved with Vega-Lite {major}, newer than this "
+            f"package targets (Vega-Lite {_TARGET_VEGA_LITE_MAJOR}). Most "
+            "things should still work because Vega-Lite is largely "
+            "backward-compatible, but if rendering looks wrong please "
+            "file an issue.",
+            stacklevel=3,
+        )
 
 
 def _strip_params_views(spec: Any) -> None:

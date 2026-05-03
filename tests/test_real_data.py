@@ -220,6 +220,7 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
         chart,
         chart_strain_field="axis_label",
         tree_strain_field="derived_haplotype",
+        branch_length="div",
         tree_size=140,
     )
 
@@ -293,6 +294,7 @@ def test_h1n1_end_to_end_via_tap_plot() -> None:
         chart,
         chart_strain_field="axis_label",
         tree_strain_field="derived_haplotype",
+        branch_length="div",
         tree_size=140,
     )
 

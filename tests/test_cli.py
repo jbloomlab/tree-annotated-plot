@@ -42,6 +42,30 @@ def test_help_lists_auto_generated_options() -> None:
         assert opt in result.output, f"missing option in --help: {opt}"
 
 
+def test_help_lists_required_options_before_defaulted() -> None:
+    """All five required options (--tree, --chart-spec, --output,
+    --chart-strain-field, --tree-strain-field) should appear in --help
+    *before* any optional-with-default option."""
+    result = _runner().invoke(main, ["--help"])
+    assert result.exit_code == 0
+    # Find the position of each required option's first occurrence.
+    required = [
+        "--tree ",
+        "--chart-spec",
+        "--output",
+        "--chart-strain-field",
+        "--tree-strain-field",
+    ]
+    # And one option with a default — must come AFTER all required ones.
+    first_optional = "--branch-length "
+    positions = {opt: result.output.find(opt) for opt in required + [first_optional]}
+    for opt in required:
+        assert positions[opt] >= 0, f"{opt!r} missing from --help"
+        assert (
+            positions[opt] < positions[first_optional]
+        ), f"{opt!r} should appear before {first_optional!r} in --help"
+
+
 def test_help_includes_descriptions_from_plot_config() -> None:
     """The --help text should carry the actual descriptions written on
     PlotConfig fields. Pin one phrase from each of two fields."""
@@ -68,6 +92,8 @@ def test_missing_required_chart_strain_field_exits_nonzero(tmp_path: Path) -> No
             str(chart),
             "--tree-strain-field",
             "derived_haplotype",
+            "--branch-length",
+            "div",
             "--output",
             str(tmp_path / "out.html"),
         ],
@@ -94,6 +120,8 @@ def test_h3n2_end_to_end(tmp_path: Path) -> None:
             "axis_label",
             "--tree-strain-field",
             "derived_haplotype",
+            "--branch-length",
+            "div",
             "--tree-size",
             "140",
             "--output",
@@ -124,6 +152,8 @@ def test_dual_flag_no_strict_version_recognized(tmp_path: Path) -> None:
             "axis_label",
             "--tree-strain-field",
             "derived_haplotype",
+            "--branch-length",
+            "div",
             "--no-strict-version",
             "--output",
             str(out),

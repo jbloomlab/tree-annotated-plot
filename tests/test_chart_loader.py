@@ -182,6 +182,29 @@ def test_missing_chart_schema_warns() -> None:
         _load_chart(spec, strict_version=True)
 
 
+def test_vega_lite_newer_than_target_always_warns() -> None:
+    """Vega-Lite > 6 (a hypothetical future schema) is untested but
+    probably backward-compatible. We warn but never raise — strict_version
+    has no effect on this case (the flag controls known-stale, not
+    newer-than-tested)."""
+    spec = {
+        "$schema": "https://vega.github.io/schema/vega-lite/v9.json",
+        "data": {"values": [{"strain": "A", "titer": 1}]},
+        "mark": "circle",
+        "encoding": {
+            "x": {"field": "titer", "type": "quantitative"},
+            "y": {"field": "strain", "type": "nominal"},
+        },
+    }
+    # Default strict_version=True still warns rather than raising.
+    with pytest.warns(UserWarning, match="newer than this package"):
+        out = _load_chart(spec, strict_version=True)
+    assert isinstance(out, alt.Chart)
+    # And strict_version=False also just warns.
+    with pytest.warns(UserWarning, match="newer than this package"):
+        _load_chart(spec, strict_version=False)
+
+
 def test_unrecognized_chart_schema_warns() -> None:
     spec = {
         "$schema": "https://example.com/not-a-vega-schema.json",

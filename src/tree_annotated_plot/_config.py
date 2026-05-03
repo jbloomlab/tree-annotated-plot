@@ -42,10 +42,13 @@ class PlotConfig:
 
     branch_length: Annotated[
         Literal["div", "num_date"],
-        'Which Auspice node attribute supplies branch lengths. "div" '
-        '(default) reads node_attrs.div. "num_date" reads '
-        "node_attrs.num_date.value.",
-    ] = "div"
+        "Required. Which Auspice node attribute supplies branch lengths. "
+        '"div" reads node_attrs.div (a scalar absolute divergence from '
+        'the root). "num_date" reads node_attrs.num_date.value (calendar '
+        "position in years). Specifying this explicitly keeps the units "
+        "of the branch axis unambiguous and prevents the package from "
+        "guessing the wrong field for trees that carry both.",
+    ]
 
     tree_size: Annotated[
         int,
@@ -118,12 +121,15 @@ class PlotConfig:
 
     strict_version: Annotated[
         bool,
-        "When on (default) the package raises ValueError if the chart "
-        "spec's $schema URL identifies Vega-Lite 5 or earlier, or if the "
-        "Auspice JSON's top-level `version` is not v2. When off, both "
-        "cases become warnings and parsing proceeds. Has no effect on a "
-        "live alt.Chart (the constructing altair version is necessarily "
-        "the running altair version).",
+        "Controls how mismatched-version inputs are handled. When on "
+        "(default), known-stale specs raise: Vega-Lite 5 or earlier, "
+        "and Auspice JSON whose `version` is not v2. When off, those "
+        "same cases become warnings and parsing proceeds. Vega-Lite "
+        "*newer* than the targeted version (currently 6) is always a "
+        "warning regardless of this flag — it's untested but Vega-Lite "
+        "tends to stay backward-compatible. Has no effect on a live "
+        "alt.Chart (the constructing altair version is necessarily the "
+        "running altair version).",
     ] = True
 
 

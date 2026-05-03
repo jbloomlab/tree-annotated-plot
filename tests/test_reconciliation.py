@@ -86,6 +86,7 @@ def test_chart_strain_not_in_tree_is_fatal_default() -> None:
             chart,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
         )
 
 
@@ -99,6 +100,7 @@ def test_chart_strain_not_in_tree_is_fatal_even_with_prune() -> None:
             chart,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
             prune_tree_to_chart=True,
         )
 
@@ -116,6 +118,7 @@ def test_tree_tip_not_in_chart_is_fatal_default() -> None:
             chart,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
         )
 
 
@@ -128,6 +131,7 @@ def test_tree_tip_not_in_chart_succeeds_with_prune() -> None:
         chart,
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         prune_tree_to_chart=True,
     )
     assert isinstance(out, alt.HConcatChart)
@@ -223,6 +227,7 @@ def test_duplicate_tree_strain_field_values_are_fatal() -> None:
             chart,
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
         )
 
 
@@ -253,6 +258,7 @@ def test_error_message_contains_sample_values_and_candidate_hint() -> None:
             chart,
             chart_strain_field="cohort",  # wrong choice on chart side
             tree_strain_field="name",
+            branch_length="div",
         )
     msg = str(excinfo.value)
     # Includes sample values from both sides:

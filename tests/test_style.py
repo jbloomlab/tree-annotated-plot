@@ -55,6 +55,7 @@ def test_defaults_yield_three_layers() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
     )
     assert len(_tree_layers(out)) == 3
 
@@ -68,6 +69,7 @@ def test_tree_line_width_propagates() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         tree_line_width=3.5,
     )
     marks = _layer_marks(_tree_layers(out))
@@ -84,6 +86,7 @@ def test_tree_node_size_propagates() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         tree_node_size=80,
     )
     marks = _layer_marks(_tree_layers(out))
@@ -97,6 +100,7 @@ def test_leader_line_width_propagates() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         leader_line_width=2.0,
     )
     marks = _layer_marks(_tree_layers(out))
@@ -113,6 +117,7 @@ def test_tree_node_size_zero_disables_tip_circles() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         tree_node_size=0,
     )
     marks = _layer_marks(_tree_layers(out))
@@ -127,6 +132,7 @@ def test_leader_line_width_zero_disables_leader_layer() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         leader_line_width=0,
     )
     marks = _layer_marks(_tree_layers(out))
@@ -142,6 +148,7 @@ def test_both_disabled_leaves_only_branches() -> None:
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
+        branch_length="div",
         tree_node_size=0,
         leader_line_width=0,
     )
@@ -166,5 +173,6 @@ def test_negative_style_raises(kwarg: str, bad: float) -> None:
             _chart(),
             chart_strain_field="strain",
             tree_strain_field="name",
+            branch_length="div",
             **{kwarg: bad},
         )

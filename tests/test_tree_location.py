@@ -59,7 +59,11 @@ def _horizontal_chart() -> alt.Chart:
 
 
 def _kw():
-    return dict(chart_strain_field="strain", tree_strain_field="name")
+    return dict(
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
 
 
 # ---------- defaults ----------
