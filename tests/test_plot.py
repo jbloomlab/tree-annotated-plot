@@ -87,13 +87,23 @@ def _synthetic_chart(*, height: int | None = 200) -> alt.Chart:
 
 
 def test_plot_returns_hconcat_with_two_panels():
-    out = tap.plot(_synthetic_auspice(), _synthetic_chart())
+    out = tap.plot(
+        _synthetic_auspice(),
+        _synthetic_chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+    )
     assert isinstance(out, alt.HConcatChart)
     assert len(out.hconcat) == 2
 
 
 def test_plot_overrides_y_sort_to_tree_tip_order():
-    out = tap.plot(_synthetic_auspice(), _synthetic_chart())
+    out = tap.plot(
+        _synthetic_auspice(),
+        _synthetic_chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+    )
     user_panel_spec = out.hconcat[1].to_dict()
     assert user_panel_spec["encoding"]["y"]["sort"] == ["A", "B", "C", "D"]
 
@@ -102,18 +112,33 @@ def test_plot_strain_mismatch_raises():
     bad = _synthetic_chart()
     bad.data = bad.data.replace({"strain": {"D": "X"}})
     with pytest.raises(ValueError, match="strain set mismatch"):
-        tap.plot(_synthetic_auspice(), bad)
+        tap.plot(
+            _synthetic_auspice(),
+            bad,
+            chart_strain_field="strain",
+            tree_strain_field="name",
+        )
 
 
 def test_plot_requires_explicit_height():
     chart = _synthetic_chart(height=None)
     with pytest.raises(ValueError, match="height"):
-        tap.plot(_synthetic_auspice(), chart)
+        tap.plot(
+            _synthetic_auspice(),
+            chart,
+            chart_strain_field="strain",
+            tree_strain_field="name",
+        )
 
 
 def test_plot_renders_to_html(tmp_path):
     """End-to-end: result can be saved to standalone HTML."""
-    out = tap.plot(_synthetic_auspice(), _synthetic_chart())
+    out = tap.plot(
+        _synthetic_auspice(),
+        _synthetic_chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+    )
     target = tmp_path / "out.html"
     out.save(str(target))
     html = target.read_text()

@@ -160,3 +160,126 @@ def test_chart_axis_label_sort_matches_tree_haplotypes(
         f"only-in-tree={sorted(tree_strains - chart_strains)[:5]}"
     )
     assert len(chart_strains) == expected_tips
+
+
+def _build_subtype_chart(subtype: str, chart_type: str):
+    """Construct an in-process Kikawa chart by importing the example builder.
+
+    Skips the test if the upstream CSVs aren't reachable (network failure /
+    repo move) so a missing network doesn't take the suite down.
+    """
+    import importlib.util
+
+    builder_path = (
+        Path(__file__).resolve().parent.parent
+        / "examples"
+        / "flu-seqneut-2025to2026_titer_charts.py"
+    )
+    spec = importlib.util.spec_from_file_location("builder", builder_path)
+    assert spec and spec.loader
+    builder = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(builder)
+        titers, viruses, sera = builder.load_data()
+    except Exception as exc:
+        pytest.skip(f"could not load Kikawa CSVs (network?): {exc}")
+
+    metadata = builder.build_metadata(sera)
+    all_cohorts = ["All"] + sorted(sera["cohort"].unique())
+    return builder.make_chart(
+        subtype=subtype,
+        chart_type=chart_type,
+        titers=titers,
+        viruses=viruses,
+        metadata=metadata,
+        all_cohorts=all_cohorts,
+    )
+
+
+def test_h3n2_end_to_end_via_tap_plot() -> None:
+    """tap.plot against the real H3N2 chart + Auspice tree.
+
+    The H3N2 chart is vertical (strain on y) → output is HConcatChart with
+    the tree on the left and the chart on the right. The chart panel's
+    strain sort is rewritten to the tree's tip order.
+    """
+    import altair as alt
+
+    import tree_annotated_plot as tap
+
+    auspice = DATA_DIR / "flu-seqneut-2025to2026_H3N2.json"
+    if not auspice.exists():
+        pytest.skip(
+            "examples/data/flu-seqneut-2025to2026_H3N2.json not present; "
+            "run `python examples/fetch_auspice_data.py`"
+        )
+
+    chart = _build_subtype_chart("H3N2", "iqr")
+    out = tap.plot(
+        str(auspice),
+        chart,
+        chart_strain_field="axis_label",
+        tree_strain_field="derived_haplotype",
+        tree_width=140,
+    )
+
+    assert isinstance(out, alt.HConcatChart)
+    assert len(out.hconcat) == 2
+
+    # The chart panel (right) should carry a sort that matches the tree's
+    # tip order at every encoding referencing axis_label.
+    out_dict = out.to_dict()
+    inner = out_dict["hconcat"][1]
+    found_sort = _find_axis_label_sort(inner)
+    assert found_sort is not None
+    assert len(found_sort) == 54
+
+    # The new order should match the depth-first tip order of the loaded tree.
+    with auspice.open() as f:
+        tree_json = json.load(f)
+    tree_tip_order = _depth_first_haplotypes(tree_json["tree"])
+    assert found_sort == tree_tip_order, (
+        "chart sort does not match tree tip order; "
+        f"first 5 expected={tree_tip_order[:5]}, got={found_sort[:5]}"
+    )
+
+
+def test_h1n1_horizontal_layout_currently_unsupported() -> None:
+    """The H1N1 chart has the strain on x (horizontal layout, tree on top).
+    Phase 2g implements that path; until then we expect NotImplementedError."""
+    import tree_annotated_plot as tap
+
+    auspice = DATA_DIR / "flu-seqneut-2025to2026_H1N1.json"
+    if not auspice.exists():
+        pytest.skip(
+            "examples/data/flu-seqneut-2025to2026_H1N1.json not present; "
+            "run `python examples/fetch_auspice_data.py`"
+        )
+
+    chart = _build_subtype_chart("H1N1", "lines")
+    with pytest.raises(NotImplementedError, match="(?i)horizontal layout"):
+        tap.plot(
+            str(auspice),
+            chart,
+            chart_strain_field="axis_label",
+            tree_strain_field="derived_haplotype",
+            tree_width=140,
+        )
+
+
+def _depth_first_haplotypes(node: dict) -> list[str]:
+    """Yield tip derived_haplotype.value strings in depth-first order."""
+    out: list[str] = []
+
+    def visit(n: dict) -> None:
+        children = n.get("children")
+        if children:
+            for c in children:
+                visit(c)
+            return
+        v = n.get("node_attrs", {}).get("derived_haplotype", {}).get("value")
+        if isinstance(v, str):
+            out.append(v)
+
+    visit(node)
+    return out

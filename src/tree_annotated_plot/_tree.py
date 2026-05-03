@@ -14,7 +14,11 @@ import pandas as pd
 class TreeNode:
     """A node in a phylogenetic tree.
 
-    `x` is divergence from the root (read from `node_attrs.div` in Auspice JSON).
+    `name` carries the resolved strain identifier for tips (the value at
+    `tree_strain_field`). For internal nodes, `name` is the Auspice top-level
+    `name` field — internal-node identity isn't used for chart-strain matching.
+
+    `x` is divergence from the root (read from `node_attrs.div`).
     `y` is set by :func:`layout` and is the integer index of the node's tip
     (for tips) or the midpoint of its descendants' tip indices (for internal
     nodes).
@@ -30,8 +34,25 @@ class TreeNode:
         return not self.children
 
 
-def load_auspice(source: str | Path | dict) -> TreeNode:
-    """Load an Auspice JSON tree from a path, dict, or file-like object."""
+def load_auspice(
+    source: str | Path | dict,
+    *,
+    tree_strain_field: str,
+) -> TreeNode:
+    """Load an Auspice JSON tree from a path or dict.
+
+    Parameters
+    ----------
+    source
+        Path to an Auspice JSON file, or an already-parsed dict.
+    tree_strain_field
+        Where on each tip to find the strain identifier. The literal string
+        ``"name"`` selects the tip's top-level ``name`` field; any other value
+        ``X`` selects ``node_attrs[X]`` (auto-unwrapping the Auspice
+        ``{"value": ...}`` convention). Dotted paths are not accepted.
+    """
+    _validate_tree_strain_field(tree_strain_field)
+
     if isinstance(source, (str, Path)):
         with open(source) as f:
             data = json.load(f)
@@ -42,17 +63,61 @@ def load_auspice(source: str | Path | dict) -> TreeNode:
 
     if "tree" not in data:
         raise ValueError("Auspice JSON must have a top-level 'tree' field")
-    return _parse_node(data["tree"])
+    return _parse_node(data["tree"], tree_strain_field)
 
 
-def _parse_node(d: dict) -> TreeNode:
-    name = d.get("name")
-    if not name:
-        raise ValueError(f"tree node missing 'name': {d!r}")
+def _validate_tree_strain_field(tree_strain_field: str) -> None:
+    if not isinstance(tree_strain_field, str) or not tree_strain_field:
+        raise ValueError(
+            f"tree_strain_field must be a non-empty string, got "
+            f"{tree_strain_field!r}"
+        )
+    if "." in tree_strain_field:
+        raise ValueError(
+            f"tree_strain_field={tree_strain_field!r} contains a dot. Dotted "
+            "paths are not supported. Use 'name' for the top-level Auspice "
+            "node `name` field, or a single attribute name (e.g. "
+            "'derived_haplotype') to look up under node_attrs (the "
+            "{'value': ...} Auspice convention is auto-unwrapped)."
+        )
+
+
+def _resolve_tip_strain(node_dict: dict, tree_strain_field: str) -> str:
+    """Look up tree_strain_field on a tip and return its string value."""
+    if tree_strain_field == "name":
+        v = node_dict.get("name")
+    else:
+        attrs = node_dict.get("node_attrs", {})
+        if tree_strain_field not in attrs:
+            raise ValueError(
+                f"tree tip {node_dict.get('name', '?')!r} has no "
+                f"node_attrs[{tree_strain_field!r}]"
+            )
+        v = attrs[tree_strain_field]
+        if isinstance(v, dict) and "value" in v:
+            v = v["value"]
+
+    if not isinstance(v, str) or not v:
+        raise ValueError(
+            f"tree_strain_field={tree_strain_field!r} on tip "
+            f"{node_dict.get('name', '?')!r} resolved to {v!r}; expected a "
+            "non-empty string"
+        )
+    return v
+
+
+def _parse_node(d: dict, tree_strain_field: str) -> TreeNode:
+    children_dicts = d.get("children", [])
     div = d.get("node_attrs", {}).get("div")
     if div is None:
-        raise ValueError(f"tree node {name!r} missing node_attrs.div")
-    children = [_parse_node(c) for c in d.get("children", [])]
+        raise ValueError(f"tree node {d.get('name', '?')!r} missing node_attrs.div")
+    if children_dicts:
+        # Internal node: use the Auspice top-level name (always present).
+        name = d.get("name") or "<internal>"
+    else:
+        # Tip: resolve via tree_strain_field.
+        name = _resolve_tip_strain(d, tree_strain_field)
+    children = [_parse_node(c, tree_strain_field) for c in children_dicts]
     return TreeNode(name=name, x=float(div), children=children)
 
 

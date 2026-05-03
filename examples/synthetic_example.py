@@ -145,7 +145,13 @@ def build_chart(df: pd.DataFrame) -> alt.Chart:
 
 def main() -> None:
     chart = build_chart(synthetic_titers())
-    annotated = tap.plot(synthetic_auspice(), chart, tree_width=140)
+    annotated = tap.plot(
+        synthetic_auspice(),
+        chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        tree_width=140,
+    )
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     html_path = OUT_DIR / "synthetic_example.html"
