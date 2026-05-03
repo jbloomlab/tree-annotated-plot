@@ -12,6 +12,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Opt every JavaScript-based action in this workflow into Node.js 24.
+# GitHub deprecated Node.js 20 actions in late 2025 (the runner emits
+# a warning whenever it loads one); Node 20 is removed from runners
+# entirely on 2026-09-16. The env var forces the runner to use
+# Node.js 24 regardless of what major version each action's source
+# pins, which side-steps the deprecation cleanly without us having to
+# track and bump every action's tag in lockstep with their releases.
+# When all the actions used here ship Node-24 majors (and we bump to
+# them), this can be removed.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 permissions:
   contents: read
   pages: write
