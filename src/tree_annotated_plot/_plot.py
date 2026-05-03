@@ -531,22 +531,21 @@ def _pop_toplevel_only_attrs(
 
 
 def _apply_combined_config(combined: alt.HConcatChart, hoisted_config: Any) -> None:
-    """Set the combined chart's config = (user's config) ∪ {view.stroke=None}.
+    """Apply the user chart's hoisted top-level config to the combined chart.
 
-    `view.stroke=None` removes the panel borders that altair would otherwise
-    draw around each subspec. The user's config (if any) takes precedence on
-    everything else; we only add `view.stroke=None` if not already set.
+    The user's config drives the chart panel's appearance unchanged
+    (including `view.stroke` if the user set one via `.configure_view(...)`);
+    the tree panel handles its own border at the panel level (see
+    `_build_tree_chart`'s `view = ViewBackground(stroke=None)`). If the user
+    had no config, we don't add one — the chart panel gets Vega-Lite's
+    defaults and the tree's panel-level view still wins.
     """
     if hoisted_config is alt.Undefined:
-        config_dict: dict = {}
-    elif hasattr(hoisted_config, "to_dict"):
-        config_dict = hoisted_config.to_dict()
+        return
+    if hasattr(hoisted_config, "to_dict"):
+        combined._kwds["config"] = alt.Config.from_dict(hoisted_config.to_dict())
     else:
-        config_dict = dict(hoisted_config)
-    view = dict(config_dict.get("view") or {})
-    view.setdefault("stroke", None)
-    config_dict["view"] = view
-    combined._kwds["config"] = alt.Config.from_dict(config_dict)
+        combined._kwds["config"] = alt.Config.from_dict(dict(hoisted_config))
 
 
 def _channel_field(ch: Any) -> str | None:
@@ -665,4 +664,11 @@ def _build_tree_chart(
         alt.Chart(tips_df).mark_circle(size=28, color="black").encode(x=x_enc, y=y_enc)
     )
 
-    return (leaders + branches + tip_marks).properties(width=width, height=height)
+    tree_chart = (leaders + branches + tip_marks).properties(width=width, height=height)
+    # Suppress the panel border on the tree itself. This is a panel-level
+    # Vega-Lite `view` property, which overrides any inherited
+    # `config.view.stroke` (e.g. if the user's chart was built with
+    # `.configure_view(stroke="black")`, that stroke applies to the chart
+    # panel but not to the tree).
+    tree_chart._kwds["view"] = alt.ViewBackground(stroke=None)
+    return tree_chart

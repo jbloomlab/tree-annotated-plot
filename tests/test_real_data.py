@@ -257,6 +257,15 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
     # pixel height of N*n_tips on the tree. Pin the contract.
     assert out_dict["hconcat"][0]["height"] == 11 * 54
 
+    # Tree panel border suppression: the H3N2 chart is built with
+    # `.configure_view(stroke="black")` — a deliberate styling choice that
+    # belongs on the chart panel, not on the tree. We override at the tree's
+    # panel-level view (which takes precedence over inherited config), so
+    # the outer config still carries stroke='black' for the chart panel
+    # while the tree gets stroke=None.
+    assert out_dict["hconcat"][0].get("view") == {"stroke": None}
+    assert out_dict.get("config", {}).get("view", {}).get("stroke") == "black"
+
 
 def test_h1n1_horizontal_layout_currently_unsupported() -> None:
     """The H1N1 chart has the strain on x (horizontal layout, tree on top).
