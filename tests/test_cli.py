@@ -133,6 +133,41 @@ def test_h3n2_end_to_end(tmp_path: Path) -> None:
     assert out.stat().st_size > 0
 
 
+def test_h1n1_end_to_end(tmp_path: Path) -> None:
+    """The horizontal-layout path through the CLI: H1N1 chart (strain on
+    x) + tree → VConcat output written to disk."""
+    auspice = DATA_DIR / "flu-seqneut-2025to2026_H1N1.json"
+    chart = DATA_DIR / "flu-seqneut-2025to2026_H1N1_titers.json"
+    if not (auspice.exists() and chart.exists()):
+        pytest.skip("real-data files not present")
+    out = tmp_path / "h1n1.html"
+    result = _runner().invoke(
+        main,
+        [
+            "--tree",
+            str(auspice),
+            "--chart-spec",
+            str(chart),
+            "--chart-strain-field",
+            "axis_label",
+            "--tree-strain-field",
+            "derived_haplotype",
+            "--branch-length",
+            "div",
+            "--tree-size",
+            "140",
+            "--scale-bar",
+            "--branch-length-units",
+            "substitutions",
+            "--output",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, f"CLI failed: {result.output}"
+    assert out.exists()
+    assert out.stat().st_size > 0
+
+
 def test_dual_flag_no_strict_version_recognized(tmp_path: Path) -> None:
     """--no-strict-version is the negative side of the dual flag and
     should be a recognized option (not an error)."""

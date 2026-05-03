@@ -7,9 +7,17 @@
   supported Python version, build config, tool settings. Don't restate any of
   these in prose; refer to `pyproject.toml`.
 - **Single source of truth — `PlotConfig`**: every plot-parameter description
-  lives in `_config.py` as `Annotated[T, "<description>"]`. `tap.plot`'s
-  docstring, the click `--help` text, and the rendered docs all pull from
-  there. Adding a parameter = one edit (a new field), not three.
+  lives in `_config.py` as `Annotated[T, "<description>"]`. The click
+  `--help` text and the rendered Python API / CLI docs all pull from
+  there directly. `tap.plot`'s docstring carries the same descriptions
+  (NumPy format, with light extra prose) for `help(tap.plot)` users at
+  the REPL — when you change a description, update both. Adding a
+  parameter = a new PlotConfig field + a matching block in `tap.plot`'s
+  docstring + a kwarg in the function signature with the same default.
+- **Docstring style**: NumPy (Parameters / Returns sections with the
+  `----------` underline), matching `mkdocs.yml`'s
+  `docstring_style: numpy`. Don't mix Google-style `Args:` blocks in;
+  mkdocstrings won't render them consistently.
 - **Fail fast**: validate inputs early and raise clear `ValueError` on
   unexpected data. Prefer assertions and explicit error messages over silent
   fallbacks. Tip-set reconciliation errors should include sample values from

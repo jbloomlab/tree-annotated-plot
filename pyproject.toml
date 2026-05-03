@@ -10,12 +10,25 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { file = "LICENSE" }
 authors = [{ name = "Jesse Bloom", email = "jbloom@fredhutch.org" }]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 dependencies = [
     "altair>=6.0,<7",
     "click>=8.0",
     "pandas>=2.0",
     "vl-convert-python>=1.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jbloomlab/tree-annotated-plot"
+Repository = "https://github.com/jbloomlab/tree-annotated-plot"
+Issues = "https://github.com/jbloomlab/tree-annotated-plot/issues"
 
 [project.optional-dependencies]
 dev = [
