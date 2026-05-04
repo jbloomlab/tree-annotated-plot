@@ -22,6 +22,43 @@ pip install -e ".[dev,docs]"
 [pyproject.toml](pyproject.toml) is the canonical source for the supported Python
 version and runtime dependencies.
 
+### Visual verification after code changes
+
+This package has automated tests for chart **structure** (encodings,
+sort order, tip reconciliation, scale-bar arithmetic, etc.), but
+**not** for chart **appearance** — there are no image-snapshot
+regression tests, because rendering is sensitive to fonts,
+`vl-convert-python` versions, and platform differences in ways that
+make pixel-level comparison flaky in practice.
+
+So the discipline is manual: any time you change code that affects
+rendering (`src/tree_annotated_plot/_plot.py`,
+`src/tree_annotated_plot/_tree.py`, the example scripts under
+`examples/`, or anything they touch), run the full check below and
+**eyeball every example** before considering the change done.
+
+```bash
+bash scripts/check.sh        # lint + format + pytest (all 100+ tests)
+bash scripts/build_docs.sh   # regenerates docs/images + docs/charts and runs mkdocs --strict
+```
+
+Then open `site/examples.html` in a browser and, for each example:
+
+1. Look at the embedded SVG screenshot. Does it match what the
+   feature you changed should produce? Are tip rows still aligned with
+   the chart rows? Is the tree's tip-end facing the chart? Is the
+   scale bar (if enabled) centered and labeled correctly?
+2. Click "Open the interactive chart →". Hover tips to confirm
+   tooltips fire; if there's a cohort selector (Kikawa examples),
+   toggle it; pan/zoom if relevant.
+3. Compare against the
+   [deployed site](https://jbloomlab.github.io/tree-annotated-plot/)
+   (which still reflects `main` before your change) for what "good"
+   looks like.
+
+If something visibly regresses, fix it before pushing — there's no
+CI gate that will catch a visual regression for you.
+
 ### Documentation
 The docs are at
 [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/).

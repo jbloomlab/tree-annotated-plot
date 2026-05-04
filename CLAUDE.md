@@ -66,6 +66,20 @@
   and `docs/charts/*.html` from the example modules; both
   directories are **gitignored** — never commit anything into them.
   The same asset script runs in CI before `mkdocs build`.
+- **Eyeball examples after any rendering change.** There are no
+  image-snapshot regression tests (vl-convert/font/platform variance
+  makes them flaky), so visual regressions only get caught by
+  looking. After any change to `_plot.py`, `_tree.py`, the example
+  scripts, or anything they touch: run `scripts/build_docs.sh`, open
+  `site/examples.html`, and click through each example — both the
+  embedded SVG and the interactive HTML link. Confirm tip-row
+  alignment, tree orientation, scale bar (if applicable),
+  tooltips, and any selection/cohort bindings still work. The full
+  recipe is in `README.md` under "Visual verification after code
+  changes". When telling the user a rendering-affecting task is
+  done, also report whether you ran this check (and that you
+  cannot, from a non-interactive shell, actually verify the rendered
+  output yourself — they need to look).
 - **Docs are auto-deployed**. The
   [`.github/workflows/docs.yml`](.github/workflows/docs.yml)
   workflow runs on every push to `main`, generates assets, builds
