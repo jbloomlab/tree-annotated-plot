@@ -95,11 +95,13 @@
 - **Releases are tag-driven**. Push a `vX.Y.Z` tag (after bumping
   `pyproject.toml`'s `version`) and
   [`.github/workflows/release.yml`](.github/workflows/release.yml)
-  builds wheel + sdist and publishes to PyPI via trusted publishing
-  (OIDC — no token in the repo). The build job verifies the tag and
-  `pyproject.toml` version match before publishing. Per-release recipe
-  and one-time PyPI configuration steps are in `README.md` under
-  "Releasing a new version".
+  builds wheel + sdist, publishes to PyPI via trusted publishing
+  (OIDC — no token in the repo), and creates a matching GitHub
+  Release with auto-generated notes + the wheel/sdist attached as
+  assets. The build job verifies the tag and `pyproject.toml` version
+  match before publishing. Per-release recipe and one-time PyPI
+  configuration steps are in `README.md` under "Releasing a new
+  version".
 - **Adding a new example** (full recipe in `README.md`):
   1. Self-contained module under `examples/` with module-level
      helpers (callable from outside).

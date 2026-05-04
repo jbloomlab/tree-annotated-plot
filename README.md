@@ -9,6 +9,22 @@ See [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.
 
 > **Note:** charts must be saved from altair 6+ (Vega-Lite v6). Older specs raise by default; pass `--no-strict-version` (CLI) or `strict_version=False` (Python) to override at your own risk. See the [docs](https://jbloomlab.github.io/tree-annotated-plot/) for details.
 
+## Installation
+
+Released on [PyPI](https://pypi.org/project/tree-annotated-plot/). Requires Python 3.13+.
+
+```bash
+pip install tree-annotated-plot
+```
+
+To install the bleeding edge directly from this repository:
+
+```bash
+pip install git+https://github.com/jbloomlab/tree-annotated-plot.git
+```
+
+For a development checkout, see [Installation (development)](#installation-development) below.
+
 ## Notes for developing the package
 
 ### Installation (development)
@@ -78,8 +94,11 @@ merge), and additionally deploys `site/` to GitHub Pages on push to
 
 A third workflow,
 [`.github/workflows/release.yml`](.github/workflows/release.yml),
-builds the sdist + wheel and publishes them to PyPI when a `v*` tag
-is pushed (see "Releasing a new version" below).
+builds the sdist + wheel when a `v*` tag is pushed, publishes them
+to PyPI, and creates a matching
+[GitHub Release](https://github.com/jbloomlab/tree-annotated-plot/releases)
+with auto-generated notes and the wheel/sdist attached (see
+"Releasing a new version" below).
 
 ### Releasing a new version
 

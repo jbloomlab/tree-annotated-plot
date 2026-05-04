@@ -24,6 +24,31 @@ with `Chart` / `LayerChart` / `FacetChart` / `HConcatChart` /
 axis. The tree drops to whichever side of the chart the strain labels
 sit on by default (left for y-axis, bottom for x-axis).
 
+## Installation
+
+Released on [PyPI](https://pypi.org/project/tree-annotated-plot/).
+Requires Python 3.13+.
+
+```bash
+pip install tree-annotated-plot
+```
+
+To pin a specific version:
+
+```bash
+pip install tree-annotated-plot==0.0.1
+```
+
+To install the bleeding edge directly from the
+[GitHub source](https://github.com/jbloomlab/tree-annotated-plot):
+
+```bash
+pip install git+https://github.com/jbloomlab/tree-annotated-plot.git
+```
+
+For a development checkout (contributors), see the README's
+[development install](https://github.com/jbloomlab/tree-annotated-plot#installation-development).
+
 ## 30-second example
 
 Given an Auspice tree at `h3n2.auspice.json` and a Vega-Lite chart spec

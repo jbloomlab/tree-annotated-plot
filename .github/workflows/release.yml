@@ -1,4 +1,6 @@
-# Build wheel + sdist and publish to PyPI when a `v*` tag is pushed.
+# When a `v*` tag is pushed: build wheel + sdist, publish to PyPI,
+# then create a GitHub Release with auto-generated notes and the
+# wheel + sdist attached as downloadable assets.
 #
 # Uses PyPI trusted publishing (OIDC) — no API token / password is
 # stored in the repo. The trusted-publisher relationship must be
@@ -80,3 +82,31 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    # Runs only after PyPI publish succeeds, so a transient PyPI failure
+    # doesn't leave a GitHub Release pointing at a version that isn't on
+    # PyPI. The Release page links to the tag, the wheel + sdist, and an
+    # auto-generated changelog (PR titles + commit list since the
+    # previous tag).
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      # `softprops/action-gh-release` needs write access to create a
+      # Release on the tag and upload the dist files as assets.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          # Attach the same wheel + sdist that went to PyPI so the
+          # Release page is a complete record of what was published.
+          files: dist/*
+          # Auto-generate notes from PR titles + commits since the
+          # previous tag. Maintainer can edit them after the fact in
+          # the Releases UI without re-running the workflow.
+          generate_release_notes: true
