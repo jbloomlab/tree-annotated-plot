@@ -161,24 +161,46 @@ def make_chart(
     facet_dim = "column" if vertical else "row"
     strain_sort = list(reversed(label_sort)) if vertical else label_sort
 
+    # Explicit `name=` on every param avoids altair's auto-generated names
+    # colliding (e.g. cohort_selection is added to two sub-charts; without a
+    # stable name altair dedupes and emits a "Automatically deduplicated
+    # selection parameter" UserWarning). Stable names also produce more
+    # readable Vega-Lite output in the saved spec JSON.
     virus_selection = alt.selection_point(
-        fields=["virus"], on="mouseover", empty=False, clear="mouseout", nearest=False
+        name="virus_selection",
+        fields=["virus"],
+        on="mouseover",
+        empty=False,
+        clear="mouseout",
+        nearest=False,
     )
     serum_selection = alt.selection_point(
-        fields=["serum"], on="mouseover", empty=False, clear="mouseout", nearest=False
+        name="serum_selection",
+        fields=["serum"],
+        on="mouseover",
+        empty=False,
+        clear="mouseout",
+        nearest=False,
     )
     cohort_selection = alt.selection_point(
-        fields=["cohort"], bind="legend", empty="all", toggle="true", clear=False
+        name="cohort_selection",
+        fields=["cohort"],
+        bind="legend",
+        empty="all",
+        toggle="true",
+        clear=False,
     )
 
     max_age = 5 * int(metadata["age_numeric"].max() // 5) + 5
     min_age_slider = alt.param(
+        name="min_age_slider",
         value=0,
         bind=alt.binding_range(
             min=0, max=max_age, step=5, name="minimum subject age (years)"
         ),
     )
     max_age_slider = alt.param(
+        name="max_age_slider",
         value=max_age,
         bind=alt.binding_range(
             min=0, max=max_age, step=5, name="maximum subject age (years)"
@@ -189,15 +211,20 @@ def make_chart(
         type="log", nice=False, domainMin=TITER_LOWER_LIMIT, padding=4
     )
 
+    # We deliberately do NOT attach params to `base`: both `layer` and
+    # `median_points` derive from `base` via `.transform_*` / `.encode(...)`,
+    # which would copy the params onto each. Then `body = layer + median_points`
+    # would carry duplicates, and altair would emit a "Automatically
+    # deduplicated selection parameter" UserWarning for each one.
+    # Instead, attach the four globally-needed params to `median_points` only
+    # (below); attach `cohort_selection` only to `dummy_cohort` (further
+    # below). Vega-Lite resolves params by name across a concat container, so
+    # `alt.condition(virus_selection, ...)` on `median_points` and
+    # `alt.condition(serum_selection, ...)` / `transform_filter(cohort_selection)`
+    # on `layer` still work — they reference the params by name without
+    # needing a local `add_params(...)`.
     base = (
         alt.Chart(titers[["serum", "virus", "titer"]])
-        .add_params(
-            virus_selection,
-            serum_selection,
-            cohort_selection,
-            min_age_slider,
-            max_age_slider,
-        )
         .encode(
             **{
                 strain_axis: alt.Y(
@@ -318,6 +345,15 @@ def make_chart(
         .transform_calculate(
             cohort_n="datum.cohort + ' (n=' + datum.n_per_cohort + ')'"
         )
+        # Attach the four globally-needed params on the faceted chart (a
+        # single outer container) rather than on `base` to avoid altair's
+        # "Automatically deduplicated selection parameter" warning, which
+        # fires when the same param appears on multiple sub-charts of a
+        # composition (`base` flowed into both `layer` and `median_points`,
+        # so the `+` combine would dedup each one). Other layers reference
+        # these params by name via alt.condition / transform_filter and
+        # resolve them globally within the concat container.
+        .add_params(virus_selection, serum_selection, min_age_slider, max_age_slider)
     )
 
     dummy_cohort = (
