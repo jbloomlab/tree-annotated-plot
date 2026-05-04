@@ -1,0 +1,82 @@
+# Build wheel + sdist and publish to PyPI when a `v*` tag is pushed.
+#
+# Uses PyPI trusted publishing (OIDC) — no API token / password is
+# stored in the repo. The trusted-publisher relationship must be
+# configured once on PyPI: project Settings → Publishing → Add trusted
+# publisher, pointing at this repo's owner + name + the workflow
+# filename `release.yml` + environment name `pypi` below. With that
+# config, GitHub mints a short-lived OIDC token at workflow runtime
+# and PyPI exchanges it for an upload token.
+#
+# Maintainer recipe (full version):
+#   1. Bump the `version` field in pyproject.toml on `main`.
+#   2. Commit, then tag: `git tag v0.1.0`.
+#   3. Push: `git push && git push --tags`.
+# The build job verifies the tag matches `pyproject.toml`'s version, so
+# a mismatched tag fails fast before anything reaches PyPI.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Verify tag matches pyproject.toml version
+        # `python -m build` doesn't check this; without the gate, a
+        # mistyped tag would happily publish a release whose
+        # __version__ disagrees with the tag name.
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version="v$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag '$tag' does not match pyproject.toml version '$version'"
+            exit 1
+          fi
+          echo "tag and version match: $tag"
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    # The `pypi` environment lets you optionally require manual approval
+    # in repo Settings → Environments → pypi → "Required reviewers"
+    # before any release lands on PyPI. PyPI's trusted-publisher config
+    # also pins this environment name.
+    environment: pypi
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # Required by PyPI trusted publishing — GitHub mints an OIDC
+      # token that PyPI exchanges for an upload token.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

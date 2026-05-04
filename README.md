@@ -76,6 +76,46 @@ mkdocstrings refs / missing images / unresolved cross-links before
 merge), and additionally deploys `site/` to GitHub Pages on push to
 `main`.
 
+A third workflow,
+[`.github/workflows/release.yml`](.github/workflows/release.yml),
+builds the sdist + wheel and publishes them to PyPI when a `v*` tag
+is pushed (see "Releasing a new version" below).
+
+### Releasing a new version
+
+Releases are fully automated by tag push. Trusted publishing (OIDC)
+means **no API token or password is stored in the repo** — PyPI
+authenticates the workflow via its repo + workflow filename +
+environment.
+
+One-time setup (only needed before the first release):
+
+1. Reserve `tree-annotated-plot` on [PyPI](https://pypi.org/) (first
+   successful publish creates it; or claim it manually via
+   `pip install build && python -m build && twine upload dist/*` from a
+   maintainer machine).
+2. On PyPI, go to the project → "Publishing" tab → "Add a new pending
+   publisher". Fill in: owner `jbloomlab`, repository
+   `tree-annotated-plot`, workflow filename `release.yml`, environment
+   `pypi`.
+3. (Optional but recommended) On GitHub, repo Settings → Environments
+   → New environment → name `pypi`. Add yourself as a required
+   reviewer if you want a manual approval gate before each release
+   lands on PyPI.
+
+Per-release recipe (every time):
+
+```bash
+# 1. Edit pyproject.toml and bump `version = "X.Y.Z"`.
+# 2. Commit and tag (the workflow verifies they match before publishing).
+git commit -am "release vX.Y.Z"
+git tag vX.Y.Z
+git push && git push --tags
+```
+
+The `release` workflow then builds, verifies tag ⇋ version match, and
+publishes to PyPI.
+
 ### Documentation
 The docs are at
 [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/).
