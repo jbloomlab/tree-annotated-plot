@@ -1,4 +1,8 @@
-# Build the docs on every push to `main` and deploy to GitHub Pages.
+# Build the docs on every push to `main` (then deploy to GitHub Pages)
+# and on every pull request targeting `main` (build only, no deploy).
+# The PR build catches broken mkdocstrings refs, missing images, and
+# unresolved cross-links *before* they land on `main` and break the
+# next deploy.
 #
 # Local equivalent: `scripts/build_docs.sh` (mkdocs build --strict).
 # This workflow file is dormant until the repo is published with Pages
@@ -9,6 +13,8 @@ name: docs
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -57,6 +63,11 @@ jobs:
           path: ./site
 
   deploy:
+    # Only deploy on push-to-main. PRs (especially from forks) lack
+    # `pages: write` permissions and would publish PR-only content to
+    # the live site if they did. The build job above still runs on PRs
+    # — that's where docs regressions get caught pre-merge.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

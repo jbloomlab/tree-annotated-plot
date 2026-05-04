@@ -59,6 +59,23 @@ Then open `site/examples.html` in a browser and, for each example:
 If something visibly regresses, fix it before pushing — there's no
 CI gate that will catch a visual regression for you.
 
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every
+push to `main` and every pull request: it installs the package, fetches
+the upstream Kikawa Auspice JSONs (so the real-data tests actually
+exercise rather than skip), builds the Kikawa titer chart specs, and
+runs `ruff check`, `black --check`, and `pytest tests/`. This mirrors
+[`scripts/check.sh`](scripts/check.sh) — green locally should mean
+green in CI.
+
+A separate workflow,
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml), builds the
+docs site on every push to `main` and every PR (catching broken
+mkdocstrings refs / missing images / unresolved cross-links before
+merge), and additionally deploys `site/` to GitHub Pages on push to
+`main`.
+
 ### Documentation
 The docs are at
 [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/).

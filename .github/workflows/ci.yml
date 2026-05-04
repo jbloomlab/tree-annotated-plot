@@ -1,0 +1,64 @@
+# Run lint, format-check, and tests on every push to main and on every PR.
+#
+# Local equivalent: `scripts/check.sh` (which expects a local .venv;
+# this workflow uses the runner's python directly so it doesn't depend
+# on that layout).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Force JavaScript-based actions to use Node 24 — same reason as
+# docs.yml: GitHub deprecated Node 20 actions in late 2025 and removes
+# Node 20 from runners on 2026-09-16.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+# Cancel in-flight runs on the same ref when a new commit lands; PRs
+# rebased many times in quick succession don't queue up wasted minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install package + dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Fetch upstream Kikawa Auspice JSONs
+        # Real-data tests in tests/test_real_data.py and tests/test_cli.py
+        # skip cleanly when these files are absent. We want them to
+        # actually run in CI, so fetch the upstream JSONs first.
+        run: python examples/fetch_auspice_data.py
+
+      - name: Build Kikawa titer chart specs
+        # tests/test_real_data.py also reads the saved Vega-Lite specs
+        # produced by this script. Ditto for tests/test_cli.py end-to-end.
+        run: python examples/flu-seqneut-2025to2026_titer_charts.py
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (black)
+        run: black --check .
+
+      - name: Tests (pytest)
+        run: pytest tests/
