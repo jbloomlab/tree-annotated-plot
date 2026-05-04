@@ -2,9 +2,9 @@
 
 Three runnable examples that span the package's API surface. Each is
 shown with a static screenshot of the rendered output and a link to
-the **fully interactive** Altair-rendered version, where tooltips,
+the **fully interactive** Altair-rendered version, with tooltips,
 selection bindings, and (for the Kikawa charts) the cohort-toggle
-legend all work just like they do in a Jupyter notebook.
+legend.
 
 ## 1. Synthetic 8-tip tree — minimum end-to-end
 
@@ -81,22 +81,6 @@ from **different fields** but join by value. The chart encodes
 tree carries the same label at `node_attrs.derived_haplotype.value`.
 You name them with `chart_strain_field` and `tree_strain_field`
 independently.
-
-!!! note "Save format: prefer `.json` over `.html`"
-    The combined chart can be saved as either a portable Vega-Lite
-    JSON spec or an interactive HTML page. We recommend `.json` —
-    it's smaller, is the canonical Vega-Lite exchange format, and
-    can be re-rendered interactively from any Vega-Lite host. HTML
-    embeds the runtime and is roughly an order of magnitude larger
-    on this example. Use `.html` only when you need a self-contained
-    viewable artefact.
-
-!!! warning "Charts must come from altair 6+ (Vega-Lite v6)"
-    The `--chart` / `chart` argument must be a Vega-Lite v6 spec.
-    Re-save older charts from an altair 6+ environment with
-    `chart.save(...)`. `--no-strict-version` /
-    `strict_version=False` lets you proceed anyway, at the risk of
-    rendering bugs from cross-version spec drift.
 
 The titer chart on its own (no tree):
 
@@ -222,3 +206,29 @@ out = tree_annotated_plot.plot(
     branch_length_units="substitutions",
 )
 ```
+
+## Notes
+
+!!! note "Input chart format: prefer `.json` over `.html`"
+    This applies to the chart you **pass into** `tree-annotated-plot`
+    via `--chart` / the Python `chart` argument — *not* to the output.
+    The chart you feed in can be saved by altair as either a portable
+    Vega-Lite JSON spec (`chart.save("titers.json")`) or an HTML page
+    (`chart.save("titers.html")`). We recommend `.json` for the input:
+    it's the canonical Vega-Lite exchange format and `tree-annotated-plot`
+    parses it directly. The `.html` path works only with altair's default
+    save template — custom `template=` arguments aren't supported, so
+    JSON is the more robust choice.
+
+    For the **output** that `tree-annotated-plot` writes via `--output`,
+    `.html` is a perfectly good choice if you want a self-contained
+    interactive page that opens in any browser. `.json` is smaller and
+    portable across Vega-Lite hosts; pick whichever fits your downstream
+    use.
+
+!!! warning "Charts must come from altair 6+ (Vega-Lite v6)"
+    The `--chart` / `chart` argument must be a Vega-Lite v6 spec.
+    Re-save older charts from an altair 6+ environment with
+    `chart.save(...)`. `--no-strict-version` /
+    `strict_version=False` lets you proceed anyway, at the risk of
+    rendering bugs from cross-version spec drift.

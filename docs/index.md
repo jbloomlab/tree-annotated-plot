@@ -24,18 +24,6 @@ with `Chart` / `LayerChart` / `FacetChart` / `HConcatChart` /
 axis. The tree drops to whichever side of the chart the strain labels
 sit on by default (left for y-axis, bottom for x-axis).
 
-!!! warning "Save your chart from altair 6+ (Vega-Lite v6)"
-    `tree-annotated-plot` is built against Vega-Lite v6 — the spec
-    format written by altair 6 and newer. A chart saved from older
-    altair (which writes Vega-Lite v5 or earlier) raises a
-    `ValueError` by default. Re-save it from an altair 6+
-    environment with `chart.save("titers.json")`. If you can't
-    upgrade and want to proceed anyway, pass `--no-strict-version`
-    (CLI) or `strict_version=False` (Python) — but spec shapes
-    differ across major versions, so rendering may be wrong. Charts
-    saved from a *newer* Vega-Lite than tested are accepted with a
-    warning (Vega-Lite is largely backward-compatible).
-
 ## 30-second example
 
 Given an Auspice tree at `h3n2.auspice.json` and a Vega-Lite chart spec
@@ -62,6 +50,18 @@ The package can be used either from the command line (above) or as a
 Python function. See [Command line](cli.md) for the CLI reference and
 [Python API](python-api.md) for the Python entry point. Both surfaces
 accept the same parameters and produce the same output.
+
+!!! warning "Save your chart from altair 6+ (Vega-Lite v6)"
+    `tree-annotated-plot` is built against Vega-Lite v6 — the spec
+    format written by altair 6 and newer. A chart saved from older
+    altair (which writes Vega-Lite v5 or earlier) raises a
+    `ValueError` by default. Re-save it from an altair 6+
+    environment with `chart.save("titers.json")`. If you can't
+    upgrade and want to proceed anyway, pass `--no-strict-version`
+    (CLI) or `strict_version=False` (Python) — but spec shapes
+    differ across major versions, so rendering may be wrong. Charts
+    saved from a *newer* Vega-Lite than tested are accepted with a
+    warning (Vega-Lite is largely backward-compatible).
 
 ## License
 

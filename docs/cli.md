@@ -8,14 +8,6 @@ The configuration options below are auto-generated from
 [`PlotConfig`](python-api.md#tree_annotated_plot.PlotConfig), so
 descriptions and CLI `--help` text are guaranteed to match.
 
-!!! warning "Save your chart from altair 6+ (Vega-Lite v6)"
-    The `--chart` file must be a Vega-Lite v6 spec — written by
-    altair 6 or newer. Older specs raise a `ValueError`. Pass
-    `--no-strict-version` to downgrade the error to a warning at
-    your own risk; rendering may be wrong because spec shapes
-    differ across major Vega-Lite versions. See the
-    [home page](index.md) for the full discussion.
-
 ## Quickstart
 
 ```bash
