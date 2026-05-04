@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 
 def _synthetic_auspice() -> dict:
@@ -87,7 +87,7 @@ def _synthetic_chart(*, height: int | None = 200) -> alt.Chart:
 
 
 def test_plot_returns_hconcat_with_two_panels():
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _synthetic_auspice(),
         _synthetic_chart(),
         chart_strain_field="strain",
@@ -99,7 +99,7 @@ def test_plot_returns_hconcat_with_two_panels():
 
 
 def test_plot_overrides_y_sort_to_tree_tip_order():
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _synthetic_auspice(),
         _synthetic_chart(),
         chart_strain_field="strain",
@@ -114,7 +114,7 @@ def test_plot_strain_mismatch_raises():
     bad = _synthetic_chart()
     bad.data = bad.data.replace({"strain": {"D": "X"}})
     with pytest.raises(ValueError, match="not present in the"):
-        tap.plot(
+        tree_annotated_plot.plot(
             _synthetic_auspice(),
             bad,
             chart_strain_field="strain",
@@ -126,7 +126,7 @@ def test_plot_strain_mismatch_raises():
 def test_plot_requires_explicit_height():
     chart = _synthetic_chart(height=None)
     with pytest.raises(ValueError, match="height"):
-        tap.plot(
+        tree_annotated_plot.plot(
             _synthetic_auspice(),
             chart,
             chart_strain_field="strain",
@@ -137,7 +137,7 @@ def test_plot_requires_explicit_height():
 
 def test_plot_renders_to_html(tmp_path):
     """End-to-end: result can be saved to standalone HTML."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _synthetic_auspice(),
         _synthetic_chart(),
         chart_strain_field="strain",

@@ -8,18 +8,47 @@ legend all work just like they do in a Jupyter notebook.
 
 ## 1. Synthetic 8-tip tree — minimum end-to-end
 
-The smallest possible call to [`tap.plot`](python-api.md#tree_annotated_plot.plot):
+The smallest possible call to
+[`tree_annotated_plot.plot`](python-api.md#tree_annotated_plot.plot):
 8 tips in two clades, four titer values per tip, a flat `alt.Chart`
-with `strain:N` on the y-axis. Useful when you're sanity-checking a
-tap.plot installation or understanding the API at minimum complexity.
+with `strain:N` on the y-axis. Useful when you're sanity-checking an
+installation or understanding the API at minimum complexity.
+
+The source for this example lives in
+[`examples/synthetic_example.py`](https://github.com/jbloomlab/tree-annotated-plot/blob/main/examples/synthetic_example.py){target="_blank"}.
+Running it produces `examples/data/synthetic_tree.json` (the Auspice
+tree) and `examples/data/synthetic_chart.json` (the saved Vega-Lite
+chart spec); the CLI invocation below consumes those two files.
+
+![Synthetic combined chart](images/synthetic_example.svg)
+
+[Open the interactive chart in a new tab →](charts/synthetic_example.html){target="_blank"}
+
+### Reproduce — command line
+
+```bash
+python examples/synthetic_example.py
+tree-annotated-plot \
+    --tree examples/data/synthetic_tree.json \
+    --chart examples/data/synthetic_chart.json \
+    --output examples/data/synthetic_example.html \
+    --chart-strain-field strain \
+    --tree-strain-field name \
+    --branch-length div \
+    --tree-size 140
+```
+
+### Reproduce — Python API
+
+This can also be done via the Python API using:
 
 ```python
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 # `synthetic_auspice()` returns an Auspice JSON dict; build_chart()
 # returns an alt.Chart with strain on y. Both live in
 # examples/synthetic_example.py.
-out = tap.plot(
+out = tree_annotated_plot.plot(
     synthetic_auspice(),
     build_chart(synthetic_titers()),
     chart_strain_field="strain",
@@ -29,27 +58,21 @@ out = tap.plot(
 )
 ```
 
-![Synthetic combined chart](images/synthetic_example.png)
-
-[Open the interactive chart in a new tab →](charts/synthetic_example.html){target="_blank"}
-
-To reproduce locally:
-
-```bash
-python examples/synthetic_example.py
-# → examples/data/synthetic_example.{html,png}
-```
-
 ## 2. Kikawa H3N2 — vertical layout, real Auspice tree
 
 The realistic case: HA neutralization titers for ~50 H3N2 strains
-across multiple sera cohorts, paired with the matching nextstrain
+across multiple sera cohorts, paired with the matching Nextstrain
 Auspice tree from
-[jbloomlab/flu-seqneut-2025to2026](https://github.com/jbloomlab/flu-seqneut-2025to2026).
+[jbloomlab/flu-seqneut-2025to2026](https://github.com/jbloomlab/flu-seqneut-2025to2026){target="_blank"}.
+You can [view the tree on Nextstrain](https://nextstrain.org/community/jbloomlab/flu-seqneut-2025to2026@main/H3N2){target="_blank"}
+or download the
+[raw Auspice JSON](https://raw.githubusercontent.com/jbloomlab/flu-seqneut-2025to2026/main/auspice/flu-seqneut-2025to2026_H3N2.json){target="_blank"}
+that this example feeds into `tree-annotated-plot`.
+
 The chart is a `VConcatChart` wrapping a `FacetChart` wrapping a
 `LayerChart` (errorband + median-points), with a strain encoding on
-each layer — `tap.plot` walks all of it and rewrites every encoding's
-sort to the tree's tip order in a single deepcopy.
+each layer — `tree_annotated_plot.plot` walks all of it and rewrites
+every encoding's sort to the tree's tip order in a single deepcopy.
 
 This example also demonstrates the case the package was *designed*
 for: the chart's strain values and the tree's tip identifiers come
@@ -57,10 +80,65 @@ from **different fields** but join by value. The chart encodes
 `axis_label:N` (a haplotype label like `K:S96C,K207Q,V223I`); the
 tree carries the same label at `node_attrs.derived_haplotype.value`.
 You name them with `chart_strain_field` and `tree_strain_field`
-independently:
+independently.
+
+!!! note "Save format: prefer `.json` over `.html`"
+    The combined chart can be saved as either a portable Vega-Lite
+    JSON spec or an interactive HTML page. We recommend `.json` —
+    it's smaller, is the canonical Vega-Lite exchange format, and
+    can be re-rendered interactively from any Vega-Lite host. HTML
+    embeds the runtime and is roughly an order of magnitude larger
+    on this example. Use `.html` only when you need a self-contained
+    viewable artefact.
+
+!!! warning "Charts must come from altair 6+ (Vega-Lite v6)"
+    The `--chart` / `chart` argument must be a Vega-Lite v6 spec.
+    Re-save older charts from an altair 6+ environment with
+    `chart.save(...)`. `--no-strict-version` /
+    `strict_version=False` lets you proceed anyway, at the risk of
+    rendering bugs from cross-version spec drift.
+
+The titer chart on its own (no tree):
+
+![H3N2 titer chart, no tree](images/h3n2_chart_only.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_chart_only.html){target="_blank"}
+
+With the tree panel added by `tree-annotated-plot`:
+
+![H3N2 combined chart](images/h3n2_combined.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_combined.html){target="_blank"}
+
+The strain axis is on `y`, so `tree_annotated_plot.plot` auto-picks
+the **vertical layout** (`tree_location` defaults to `"left"` on a
+y-encoded strain): result is an `HConcatChart` with the tree on the
+left, tips flush against the chart's strain labels, and a centered
+scale bar at the bottom of the tree panel.
+
+### Reproduce — command line
+
+```bash
+python examples/fetch_auspice_data.py
+python examples/flu-seqneut-2025to2026_titer_charts.py
+tree-annotated-plot \
+    --tree examples/data/flu-seqneut-2025to2026_H3N2.json \
+    --chart examples/data/flu-seqneut-2025to2026_H3N2_titers.json \
+    --chart-strain-field axis_label \
+    --tree-strain-field derived_haplotype \
+    --branch-length div \
+    --tree-size 140 \
+    --scale-bar \
+    --branch-length-units substitutions \
+    --output examples/data/h3n2_combined.json
+```
+
+### Reproduce — Python API
+
+This can also be done via the Python API using:
 
 ```python
-out = tap.plot(
+out = tree_annotated_plot.plot(
     "examples/data/flu-seqneut-2025to2026_H3N2.json",
     chart,                          # built by examples/flu-seqneut-2025to2026_titer_charts.py
     chart_strain_field="axis_label",
@@ -72,51 +150,68 @@ out = tap.plot(
 )
 ```
 
-The strain axis is on `y`, so `tap.plot` auto-picks the **vertical
-layout** (`tree_location` defaults to `"left"` on a y-encoded
-strain): result is an `HConcatChart` with the tree on the left, tips
-flush against the chart's strain labels, and a centered scale bar at
-the bottom of the tree panel.
+## 3. Kikawa H1N1 — horizontal layout, tree below the chart
 
-![H3N2 combined chart](images/h3n2_combined.png)
+Same data shape, same `VConcat(Facet(Layer))` chart structure, but
+the chart-builder encodes `axis_label` on `x` instead of `y`. The
+strain labels then render at the *bottom* of the chart panel, so
+`tree_annotated_plot.plot`'s default `tree_location="bottom"` puts
+the tree **underneath** the chart with its tips at the top — flush
+against the strain labels above. The output is a `VConcatChart`.
+Branches in the tree grow upward (root at the bottom of the tree
+panel, tips at the top) and the scale bar's text rotates 270° to
+read parallel to the now-vertical bar.
 
-[Open the interactive chart in a new tab →](charts/h3n2_combined.html){target="_blank"}
+You can [view the H1N1 tree on Nextstrain](https://nextstrain.org/community/jbloomlab/flu-seqneut-2025to2026@main/H1N1){target="_blank"}
+or download the
+[raw Auspice JSON](https://raw.githubusercontent.com/jbloomlab/flu-seqneut-2025to2026/main/auspice/flu-seqneut-2025to2026_H1N1.json){target="_blank"}
+fed into the example.
 
-To reproduce:
+This example demonstrates layout auto-detection: nothing about the
+call differs from the H3N2 case beyond the chart itself. The package
+detects which axis carries `chart_strain_field` and dispatches.
+
+The titer chart on its own (no tree):
+
+![H1N1 titer chart, no tree](images/h1n1_chart_only.svg)
+
+[Open the interactive chart in a new tab →](charts/h1n1_chart_only.html){target="_blank"}
+
+With the tree panel added by `tree-annotated-plot`:
+
+![H1N1 combined chart](images/h1n1_combined.svg)
+
+[Open the interactive chart in a new tab →](charts/h1n1_combined.html){target="_blank"}
+
+The chart-builder script puts the cohort legend **above** the H1N1
+faceted chart specifically so that the strain labels land on the
+chart panel's bottom edge — which is where the tree's tips sit when
+vconcat'd underneath. For the H3N2 case (strain labels on the left)
+the legend stays below the chart panel.
+
+### Reproduce — command line
 
 ```bash
 python examples/fetch_auspice_data.py
 python examples/flu-seqneut-2025to2026_titer_charts.py
 tree-annotated-plot \
-    --tree examples/data/flu-seqneut-2025to2026_H3N2.json \
-    --chart-spec examples/data/flu-seqneut-2025to2026_H3N2_titers.json \
+    --tree examples/data/flu-seqneut-2025to2026_H1N1.json \
+    --chart examples/data/flu-seqneut-2025to2026_H1N1_titers.json \
     --chart-strain-field axis_label \
     --tree-strain-field derived_haplotype \
     --branch-length div \
     --tree-size 140 \
     --scale-bar \
     --branch-length-units substitutions \
-    --output examples/data/h3n2_combined.html
+    --output examples/data/h1n1_combined.json
 ```
 
-## 3. Kikawa H1N1 — horizontal layout, tree below the chart
+### Reproduce — Python API
 
-Same data shape, same `VConcat(Facet(Layer))` chart structure, but
-the chart-builder encodes `axis_label` on `x` instead of `y`. The
-strain labels then render at the *bottom* of the chart panel, so
-`tap.plot`'s default `tree_location="bottom"` puts the tree
-**underneath** the chart with its tips at the top — flush against
-the strain labels above. The output is a `VConcatChart`. Branches in
-the tree grow upward (root at the bottom of the tree panel, tips at
-the top) and the scale bar's text rotates 270° to read parallel to
-the now-vertical bar.
-
-This example demonstrates layout auto-detection: nothing about the
-call differs from the H3N2 case beyond the chart itself. The package
-detects which axis carries `chart_strain_field` and dispatches.
+This can also be done via the Python API using:
 
 ```python
-out = tap.plot(
+out = tree_annotated_plot.plot(
     "examples/data/flu-seqneut-2025to2026_H1N1.json",
     chart,                          # H1N1 chart; strain encoded on x
     chart_strain_field="axis_label",
@@ -127,16 +222,3 @@ out = tap.plot(
     branch_length_units="substitutions",
 )
 ```
-
-![H1N1 combined chart](images/h1n1_combined.png)
-
-[Open the interactive chart in a new tab →](charts/h1n1_combined.html){target="_blank"}
-
-The chart-builder script puts the cohort legend **above** the H1N1
-faceted chart specifically so that the strain labels land on the
-chart panel's bottom edge — which is where the tree's tips sit when
-vconcat'd underneath. For the H3N2 case (strain labels on the left)
-the legend stays below the chart panel.
-
-To reproduce: same as H3N2 above, replacing `H3N2` with `H1N1`
-everywhere.

@@ -30,6 +30,7 @@ hypothetical Phase 3 work is left.
    git push && git push --tags
    ```
 5. **Add a GitHub action to run the tests**: this should include running any tests, examples, linting, and code formatting
+6. **Add installation instructions to the docs and README**: assume it can be installed from PyPI but have documentation also link to GitHub source
 
 ## Phase 3 candidate features (deferred from Phase 2)
 

@@ -1,10 +1,12 @@
 """`tree-annotated-plot` command-line entry point.
 
-The CLI's --tree, --chart-spec, --output options are hand-written (they
-are CLI-specific data inputs without a config-object equivalent).
+The CLI's --tree, --chart, --output options are hand-written (they are
+CLI-specific data inputs without a config-object equivalent: their
+*types* differ between Python and CLI surfaces, even though their
+*descriptions* are single-sourced as `_config.{TREE,CHART,OUTPUT}_DESCRIPTION`).
 Every other option is **auto-generated** from `PlotConfig` so its
 `--help` text comes from the same `Annotated[T, "<description>"]`
-metadata that documents the Python `tap.plot` function. Adding a new
+metadata that documents the Python `tree_annotated_plot.plot` function. Adding a new
 parameter takes one edit to `_config.py`; both surfaces pick it up.
 """
 
@@ -18,7 +20,12 @@ from typing import Any, Literal, get_args, get_origin, get_type_hints
 
 import click
 
-from ._config import PlotConfig
+from ._config import (
+    CHART_DESCRIPTION,
+    OUTPUT_DESCRIPTION,
+    TREE_DESCRIPTION,
+    PlotConfig,
+)
 from ._plot import _build
 
 _SCALAR_CLICK_TYPE = {int: click.INT, float: click.FLOAT, str: click.STRING}
@@ -131,27 +138,21 @@ def _stack_config_options(command: Any) -> Any:
     "tree_path",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to an Auspice JSON tree (v2).",
+    help=TREE_DESCRIPTION,
 )
 @click.option(
-    "--chart-spec",
+    "--chart",
     "chart_path",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help=(
-        "Path to a saved Vega-Lite chart spec — either *.json (canonical) "
-        "or *.html (extracted from altair's default save template)."
-    ),
+    help=CHART_DESCRIPTION,
 )
 @click.option(
     "--output",
     "output_path",
     required=True,
     type=click.Path(dir_okay=False, path_type=Path),
-    help=(
-        "Where to save the combined plot. Format inferred from extension: "
-        ".html, .json, .png, .svg, .pdf."
-    ),
+    help=OUTPUT_DESCRIPTION,
 )
 def main(tree_path: Path, chart_path: Path, output_path: Path, **kwargs: Any) -> None:
     """Top-level CLI entry point."""

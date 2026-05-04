@@ -15,7 +15,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 from tree_annotated_plot import _tree
 
 
@@ -130,11 +130,11 @@ def test_missing_div_still_raises_with_div() -> None:
         _tree.load_auspice(bad, tree_strain_field="name")
 
 
-# ---------- end-to-end through tap.plot ----------
+# ---------- end-to-end through tree_annotated_plot.plot ----------
 
 
 def test_tap_plot_with_num_date_succeeds() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice_with_both_branch_sources(),
         _chart(),
         chart_strain_field="strain",

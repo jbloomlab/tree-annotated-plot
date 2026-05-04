@@ -20,8 +20,10 @@ def test_help_lists_data_options() -> None:
     """--help should show the three CLI-specific data options."""
     result = _runner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert "--tree" in result.output
-    assert "--chart-spec" in result.output
+    # Trailing space distinguishes from --chart-strain-field /
+    # --tree-strain-field, which contain --chart and --tree as substrings.
+    assert "--tree " in result.output
+    assert "--chart " in result.output
     assert "--output" in result.output
 
 
@@ -43,15 +45,17 @@ def test_help_lists_auto_generated_options() -> None:
 
 
 def test_help_lists_required_options_before_defaulted() -> None:
-    """All five required options (--tree, --chart-spec, --output,
+    """All five required options (--tree, --chart, --output,
     --chart-strain-field, --tree-strain-field) should appear in --help
     *before* any optional-with-default option."""
     result = _runner().invoke(main, ["--help"])
     assert result.exit_code == 0
     # Find the position of each required option's first occurrence.
+    # Trailing space on --tree / --chart avoids matching --tree-strain-field
+    # / --chart-strain-field (which appear later in --help).
     required = [
         "--tree ",
-        "--chart-spec",
+        "--chart ",
         "--output",
         "--chart-strain-field",
         "--tree-strain-field",
@@ -71,10 +75,13 @@ def test_help_includes_descriptions_from_plot_config() -> None:
     PlotConfig fields. Pin one phrase from each of two fields."""
     result = _runner().invoke(main, ["--help"])
     assert result.exit_code == 0
+    # Click wraps --help output at terminal width, which can break
+    # multi-word phrases across lines. Collapse whitespace before checking.
+    flat = " ".join(result.output.split())
     # From PlotConfig.chart_strain_field's description:
-    assert "data-column name" in result.output
+    assert "data-column name" in flat
     # From PlotConfig.scale_bar's description:
-    assert "nice" in result.output
+    assert "branch-length scale" in flat
 
 
 def test_missing_required_chart_strain_field_exits_nonzero(tmp_path: Path) -> None:
@@ -88,7 +95,7 @@ def test_missing_required_chart_strain_field_exits_nonzero(tmp_path: Path) -> No
         [
             "--tree",
             str(auspice),
-            "--chart-spec",
+            "--chart",
             str(chart),
             "--tree-strain-field",
             "derived_haplotype",
@@ -114,7 +121,7 @@ def test_h3n2_end_to_end(tmp_path: Path) -> None:
         [
             "--tree",
             str(auspice),
-            "--chart-spec",
+            "--chart",
             str(chart),
             "--chart-strain-field",
             "axis_label",
@@ -146,7 +153,7 @@ def test_h1n1_end_to_end(tmp_path: Path) -> None:
         [
             "--tree",
             str(auspice),
-            "--chart-spec",
+            "--chart",
             str(chart),
             "--chart-strain-field",
             "axis_label",
@@ -181,7 +188,7 @@ def test_dual_flag_no_strict_version_recognized(tmp_path: Path) -> None:
         [
             "--tree",
             str(auspice),
-            "--chart-spec",
+            "--chart",
             str(chart),
             "--chart-strain-field",
             "axis_label",

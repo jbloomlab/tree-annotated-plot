@@ -6,14 +6,21 @@
 - **Single source of truth — `pyproject.toml`**: canonical for dependencies,
   supported Python version, build config, tool settings. Don't restate any of
   these in prose; refer to `pyproject.toml`.
-- **Single source of truth — `PlotConfig`**: every plot-parameter description
-  lives in `_config.py` as `Annotated[T, "<description>"]`. The click
-  `--help` text and the rendered Python API / CLI docs all pull from
-  there directly. `tap.plot`'s docstring carries the same descriptions
-  (NumPy format, with light extra prose) for `help(tap.plot)` users at
-  the REPL — when you change a description, update both. Adding a
-  parameter = a new PlotConfig field + a matching block in `tap.plot`'s
-  docstring + a kwarg in the function signature with the same default.
+- **Single source of truth — `PlotConfig` and `_config.py`**: every plot-parameter
+  description lives in `_config.py`. For styling/behavior knobs, the source is
+  the field's `Annotated[T, "<description>"]` metadata on `PlotConfig`; the
+  click `--help` text reads it directly, and `tree_annotated_plot.plot.__doc__`
+  is assembled at import time by `_config._render_numpy_params`, so the
+  REPL / mkdocstrings rendering pulls from the same string. Add Python-only
+  prose for a field by setting `_config.PARAM_DOC_EXTRAS[field_name] = "..."`.
+  Adding a parameter = a new `PlotConfig` field + a kwarg in
+  `tree_annotated_plot.plot`'s signature with the same default. The three
+  data-input parameters (`tree`, `chart`, `output`) can't sit on `PlotConfig`
+  because their *types* differ between surfaces (the Python API accepts live
+  `altair.Chart` / `dict` / `TreeNode`; the CLI only accepts file paths), but
+  their descriptions are still single-sourced as
+  `_config.{TREE,CHART,OUTPUT}_DESCRIPTION` constants — both the CLI's
+  `--help` and `_plot.py`'s `_PLOT_DOC_HEADER` interpolate them.
 - **Docstring style**: NumPy (Parameters / Returns sections with the
   `----------` underline), matching `mkdocs.yml`'s
   `docstring_style: numpy`. Don't mix Google-style `Args:` blocks in;
@@ -40,7 +47,7 @@
   on `x` or `y`, overrides its sort to match the tree's tip order, and
   hconcat's or vconcat's a tree panel on the matching side. Tree dictates
   tip ordering; plot follows.
-- **Two surfaces, one config**: `tap.plot()` and the `tree-annotated-plot`
+- **Two surfaces, one config**: `tree_annotated_plot.plot()` and the `tree-annotated-plot`
   CLI both accept the same parameters via `PlotConfig`. They converge on
   `_build(tree, chart, config)` so they can never disagree.
 - **Tests must remain green at every commit on `main`.** Single-developer
@@ -55,7 +62,7 @@
   ```
   `--strict` mode catches broken mkdocstrings references and missing
   cross-links. The script first calls
-  `scripts/generate_docs_assets.py` to render `docs/images/*.png`
+  `scripts/generate_docs_assets.py` to render `docs/images/*.svg`
   and `docs/charts/*.html` from the example modules; both
   directories are **gitignored** — never commit anything into them.
   The same asset script runs in CI before `mkdocs build`.
@@ -71,10 +78,10 @@
   1. Self-contained module under `examples/` with module-level
      helpers (callable from outside).
   2. New clause in `scripts/generate_docs_assets.py` that produces a
-     `.png` (into `docs/images/`) + `.html` (into `docs/charts/`).
+     `.svg` (into `docs/images/`) + `.html` (into `docs/charts/`).
   3. New section in `docs/examples.md` matching the existing
-     three-section template (motivation → code → embedded PNG +
-     interactive link → reproduce).
+     three-section template (motivation → embedded SVG +
+     interactive link → reproduce: CLI first, Python second).
   4. `scripts/build_docs.sh` confirms the page renders.
 - **Iterating on docs**: prefer `mkdocs serve` (live-reload local
   server) for content/layout changes — much faster than

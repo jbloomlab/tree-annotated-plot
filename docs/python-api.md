@@ -1,6 +1,6 @@
 # Python API
 
-## `tap.plot`
+## `tree_annotated_plot.plot`
 
 ::: tree_annotated_plot.plot
     options:
@@ -10,7 +10,7 @@
 
 The single source of truth for plot-parameter descriptions. The
 `tree-annotated-plot` CLI generates its options from this dataclass
-(see [Command line](cli.md)), and the `tap.plot` function accepts the
+(see [Command line](cli.md)), and the `tree_annotated_plot.plot` function accepts the
 same keyword arguments.
 
 ::: tree_annotated_plot.PlotConfig

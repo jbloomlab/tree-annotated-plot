@@ -14,7 +14,7 @@ from typing import Any, Literal
 import altair as alt
 import pandas as pd
 
-from . import _tree
+from . import _config, _tree
 from ._config import PlotConfig, TreeLocation
 
 # Accepted chart input forms for the public `plot` function.
@@ -43,115 +43,7 @@ def plot(
     prune_tree_to_chart: bool = False,
     strict_version: bool = True,
 ) -> alt.HConcatChart | alt.VConcatChart:
-    """Return an Altair chart with a phylogenetic tree drawn alongside `chart`.
-
-    The chart's strain-axis sort is overridden to match the tree's tip order
-    (the headline behavior of this package).
-
-    Parameters
-    ----------
-    tree
-        Auspice JSON path, dict, or a pre-parsed :class:`TreeNode`. If a path
-        or dict, it is parsed with the same `tree_strain_field` value.
-    chart
-        Either a live Altair chart (`Chart`, `LayerChart`, `FacetChart`,
-        `HConcatChart`, `VConcatChart`, `ConcatChart`), a path to a saved
-        Vega-Lite JSON (`*.json`) or HTML (`*.html`), or an already-parsed
-        spec `dict`. Whichever form, the chart must encode `chart_strain_field`
-        on `x` or `y`. Secondary encodings (color, tooltip, etc.) on the same
-        field are passed through untouched.
-    chart_strain_field
-        Required. The data-column name the chart's strain axis encodes (e.g.
-        `"strain"` or `"axis_label"`).
-    tree_strain_field
-        Required. Where on each tree tip to find the strain identifier. The
-        literal string `"name"` selects the top-level Auspice node `name`
-        field; any other value `X` selects `node_attrs[X]` (auto-unwrapping
-        the Auspice `{"value": ...}` convention). Dotted paths are not
-        accepted.
-    branch_length
-        Required. Which Auspice node attribute supplies branch lengths.
-        `"div"` reads `node_attrs.div` (a scalar absolute divergence
-        from the root). `"num_date"` reads `node_attrs.num_date.value`
-        (calendar position in years). Specifying this explicitly keeps
-        the units of the branch axis unambiguous.
-    tree_size
-        Size in pixels of the tree's branch axis (the dimension perpendicular
-        to the strain rows). For vertical layout (chart strain on `y`) this
-        is the tree panel's *width*; for horizontal layout (chart strain on
-        `x`) this is the tree panel's *height*. The tree's tip-axis
-        dimension is computed from the chart's strain dimension so tips
-        align row-for-row with chart rows.
-    tree_location
-        Where to draw the tree relative to the chart. Valid values depend
-        on which axis carries the strain encoding:
-
-        - chart strain on `y` → `"left"` (default) or `"right"`. With
-          `"right"`, the tree is hconcat'd on the right of the chart and
-          its branches flip so tips face left toward the chart.
-        - chart strain on `x` → `"bottom"` (default) or `"top"`. With
-          `"top"`, the tree is vconcat'd above the chart and its branches
-          flip so tips face down toward the chart.
-
-        Defaults match where the chart's strain-axis labels naturally
-        render (left side for y-axis, bottom for x-axis), so tips align
-        with the labels. Specifying `"top"`/`"bottom"` for a y-encoded
-        strain (or `"left"`/`"right"` for an x-encoded strain) raises
-        `ValueError`.
-    tree_line_width
-        Stroke width (px) for the tree's branch lines. Default 1.5.
-    tree_node_size
-        Area (px²) of the small filled circles drawn at each tip.
-        Default 28. Setting `tree_node_size=0` disables the tip-circle
-        layer entirely (useful when branches are densely packed and the
-        dots clutter the figure). Negative values raise.
-    leader_line_width
-        Stroke width (px) for the dashed leader lines that connect each
-        tip's branch endpoint to the strain row when the branch doesn't
-        extend all the way to `branch_max`. Default 1.0. Setting
-        `leader_line_width=0` disables the leader-line layer entirely.
-        Negative values raise.
-    scale_bar
-        Off by default. When True, adds a small bar in the tree panel
-        whose length corresponds to a "nice" number (largest value among
-        1/2/5 × 10^k that is ≤ 25% of the branch range). Sits at the tail
-        end of the tip axis, in extra pixel space added past the tree
-        body so tip-row alignment with the chart is preserved.
-    branch_length_units
-        Used only when `scale_bar=True` and `branch_length="div"`: the
-        unit string pasted after the bar's numeric length (e.g.
-        `"substitutions/site"` → `"0.01 substitutions/site"`). `None`
-        renders unitless. We do not auto-detect divergence units —
-        Auspice has no formal field for them and magnitude heuristics
-        misclassify silently. For `branch_length="num_date"` the label
-        is always in `years`/`months` and this argument is ignored.
-    prune_tree_to_chart
-        When False (default), tree tips not present in the chart's strain
-        set are a fatal error. When True, those tips (and any internal
-        nodes whose subtrees become empty) are dropped before drawing,
-        with single-child internals collapsed into their kept child. Chart
-        strains not present in the tree are *always* fatal regardless of
-        this flag — pruning would silently lose plot data.
-    strict_version
-        Controls how mismatched-version inputs are handled. When `True`
-        (default), known-stale specs raise: Vega-Lite 5 or earlier, and
-        Auspice JSON whose top-level `version` is not `v2`. With `False`,
-        those same cases become `warnings.warn` and parsing proceeds.
-        Vega-Lite *newer* than the package's target version (currently
-        6) is always a warning regardless of this flag — it's untested
-        but Vega-Lite tends to stay backward-compatible. Has no effect
-        on a live `alt.Chart` (the constructing altair version is
-        necessarily the running altair version).
-
-    Returns
-    -------
-    altair.HConcatChart | altair.VConcatChart
-        For vertical layout (chart strain on `y`), an `HConcatChart` with
-        the tree on the left and the user's chart on the right. For
-        horizontal layout (chart strain on `x`), a `VConcatChart` with the
-        tree on top and the chart below. The orientation is fully derived
-        from which axis carries `chart_strain_field`.
-    """
+    """Return an Altair chart with a phylogenetic tree drawn alongside `chart`."""
     return _build(
         tree,
         chart,
@@ -170,6 +62,44 @@ def plot(
             strict_version=strict_version,
         ),
     )
+
+
+# `plot.__doc__` is assembled from canonical descriptions in `_config`:
+# `PlotConfig`'s `Annotated[T, "<description>"]` metadata for every styling
+# / behavior knob, and `_config.{TREE,CHART}_DESCRIPTION` for the two
+# data-input parameters. The CLI's `--help` text reads from the same two
+# sources, so per-parameter text lives in exactly one place.
+_PLOT_DOC_HEADER = (
+    "Return an Altair chart with a phylogenetic tree drawn alongside `chart`.\n"
+    "\n"
+    "The chart's strain-axis sort is overridden to match the tree's tip order\n"
+    "(the headline behavior of this package).\n"
+    "\n"
+    "Parameters\n"
+    "----------\n"
+    + _config._render_data_param("tree", _config.TREE_DESCRIPTION)
+    + "\n"
+    + _config._render_data_param("chart", _config.CHART_DESCRIPTION)
+    + "\n"
+)
+
+_PLOT_DOC_FOOTER = """
+
+Returns
+-------
+altair.HConcatChart | altair.VConcatChart
+    For vertical layout (chart strain on `y`), an `HConcatChart` with the
+    tree on the left and the user's chart on the right. For horizontal
+    layout (chart strain on `x`), a `VConcatChart` with the tree on top
+    and the chart below.
+"""
+
+
+plot.__doc__ = (
+    _PLOT_DOC_HEADER
+    + _config._render_numpy_params(_config.PARAM_DOC_EXTRAS)
+    + _PLOT_DOC_FOOTER
+)
 
 
 def _build(

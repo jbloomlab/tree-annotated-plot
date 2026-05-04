@@ -2,7 +2,7 @@
 
 For each example we ship two artifacts:
 
-  - `docs/images/<name>.png` — embedded inline on the docs page so the
+  - `docs/images/<name>.svg` — embedded inline on the docs page so the
     chart is visible without the user clicking anything.
   - `docs/charts/<name>.html` — full interactive Altair-rendered chart
     that the docs page links to ("Open the interactive chart →").
@@ -25,17 +25,13 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 REPO = Path(__file__).resolve().parent.parent
 EXAMPLES = REPO / "examples"
 DATA_DIR = EXAMPLES / "data"
 DOCS_IMAGES = REPO / "docs" / "images"
 DOCS_CHARTS = REPO / "docs" / "charts"
-
-# 96 PPI keeps the H3N2 / H1N1 PNGs around 200 KB each — small enough
-# to embed inline without bloating page weight.
-_PNG_PPI = 96
 
 
 def _import_path(name: str, path: Path) -> ModuleType:
@@ -49,14 +45,14 @@ def _import_path(name: str, path: Path) -> ModuleType:
 
 
 def _save_pair(chart, basename: str) -> None:
-    """Save `chart` as both PNG (inline thumbnail) and HTML (interactive)."""
+    """Save `chart` as both SVG (inline thumbnail) and HTML (interactive)."""
     DOCS_IMAGES.mkdir(parents=True, exist_ok=True)
     DOCS_CHARTS.mkdir(parents=True, exist_ok=True)
-    png_path = DOCS_IMAGES / f"{basename}.png"
+    svg_path = DOCS_IMAGES / f"{basename}.svg"
     html_path = DOCS_CHARTS / f"{basename}.html"
-    chart.save(str(png_path), ppi=_PNG_PPI)
+    chart.save(str(svg_path))
     chart.save(str(html_path))
-    print(f"wrote {png_path.relative_to(REPO)} ({png_path.stat().st_size:,} B)")
+    print(f"wrote {svg_path.relative_to(REPO)} ({svg_path.stat().st_size:,} B)")
     print(f"wrote {html_path.relative_to(REPO)} ({html_path.stat().st_size:,} B)")
 
 
@@ -64,7 +60,7 @@ def _render_synthetic() -> None:
     """The 8-tip synthetic example: minimum end-to-end."""
     syn = _import_path("syn_example", EXAMPLES / "synthetic_example.py")
     chart = syn.build_chart(syn.synthetic_titers())
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         syn.synthetic_auspice(),
         chart,
         chart_strain_field="strain",
@@ -100,8 +96,8 @@ def _render_kikawa() -> None:
     all_cohorts = ["All"] + sorted(sera["cohort"].unique())
 
     for subtype, chart_type, basename in [
-        ("H3N2", "iqr", "h3n2_combined"),
-        ("H1N1", "lines", "h1n1_combined"),
+        ("H3N2", "iqr", "h3n2"),
+        ("H1N1", "lines", "h1n1"),
     ]:
         chart = builder.make_chart(
             subtype=subtype,
@@ -111,7 +107,10 @@ def _render_kikawa() -> None:
             metadata=metadata,
             all_cohorts=all_cohorts,
         )
-        out = tap.plot(
+        # Render the bare chart (no tree) so the docs page can show what
+        # the chart looks like before tree-annotated-plot wraps it.
+        _save_pair(chart, f"{basename}_chart_only")
+        out = tree_annotated_plot.plot(
             DATA_DIR / f"flu-seqneut-2025to2026_{subtype}.json",
             chart,
             chart_strain_field="axis_label",
@@ -121,11 +120,11 @@ def _render_kikawa() -> None:
             scale_bar=True,
             branch_length_units="substitutions",
         )
-        _save_pair(out, basename)
+        _save_pair(out, f"{basename}_combined")
 
 
 def main() -> None:
-    """Render every example to PNG + interactive HTML under `docs/`."""
+    """Render every example to SVG + interactive HTML under `docs/`."""
     _render_synthetic()
     _render_kikawa()
 

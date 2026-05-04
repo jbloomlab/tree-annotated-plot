@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 from tree_annotated_plot._plot import (
     _format_scale_bar_label,
     _nice_scale_bar_length,
@@ -94,13 +94,13 @@ def test_label_num_date_months() -> None:
     assert _format_scale_bar_label(0.25, "num_date", None) == "3 months"
 
 
-# ---------- end-to-end via tap.plot ----------
+# ---------- end-to-end via tree_annotated_plot.plot ----------
 
 
 def test_scale_bar_off_default_no_extra_pixels() -> None:
     """Default scale_bar=False keeps the tree's tip-axis at strain_dim
     (no extra pixel margin)."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -114,7 +114,7 @@ def test_scale_bar_off_default_no_extra_pixels() -> None:
 def test_scale_bar_on_extends_tree_panel() -> None:
     """scale_bar=True adds _SCALE_BAR_EXTRA_PIXELS to the tree panel
     height. The chart panel is unchanged so tip alignment is preserved."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -129,14 +129,14 @@ def test_scale_bar_on_extends_tree_panel() -> None:
 def test_scale_bar_layer_appears_in_tree_panel() -> None:
     """With scale_bar=True the tree's LayerChart should have one extra
     layer (scale bar = 1 layer with an inner bar+text composition)."""
-    out_off = tap.plot(
+    out_off = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
         branch_length="div",
     )
-    out_on = tap.plot(
+    out_on = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -152,7 +152,7 @@ def test_scale_bar_layer_appears_in_tree_panel() -> None:
 def test_scale_bar_is_centered_on_branch_range() -> None:
     """The bar's branch-axis midpoint should sit at (branch_min + branch_max)/2,
     not at branch_min (which would push a wide text label off the panel)."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -185,7 +185,7 @@ def test_scale_bar_text_rotates_in_horizontal_layout() -> None:
         .encode(x=alt.X("strain:N"), y="titer:Q")
         .properties(width=200, height=200)
     )
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         horiz_chart,
         chart_strain_field="strain",
@@ -217,7 +217,7 @@ def test_scale_bar_text_rotates_in_horizontal_layout() -> None:
 def test_scale_bar_text_not_rotated_in_vertical_layout() -> None:
     """For vertical layout the bar is horizontal so the text should be
     horizontal too (no angle attribute, or angle=0)."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -250,7 +250,7 @@ def test_scale_bar_label_uses_branch_length_units_for_div() -> None:
     string."""
     import json
 
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",

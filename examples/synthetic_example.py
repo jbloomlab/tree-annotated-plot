@@ -5,12 +5,18 @@ Run from the project root:
     .venv/bin/python examples/synthetic_example.py
 
 Outputs:
+    examples/data/synthetic_tree.json      (Auspice JSON v2 tree)
+    examples/data/synthetic_chart.json     (Vega-Lite chart spec)
     examples/data/synthetic_example.html   (interactive Vega/Altair page)
     examples/data/synthetic_example.png    (static raster via vl-convert)
+
+The two `_*.json` files are inputs to the `tree-annotated-plot` CLI; the
+docs site demonstrates a CLI invocation that consumes them.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import random
 from pathlib import Path
@@ -18,7 +24,7 @@ from pathlib import Path
 import altair as alt
 import pandas as pd
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 OUT_DIR = Path(__file__).parent / "data"
 
@@ -144,9 +150,21 @@ def build_chart(df: pd.DataFrame) -> alt.Chart:
 
 
 def main() -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Save the tree + chart spec as standalone files so the CLI can be
+    # demonstrated against them (the docs page uses these paths).
+    tree = synthetic_auspice()
+    tree_path = OUT_DIR / "synthetic_tree.json"
+    with tree_path.open("w") as f:
+        json.dump(tree, f, indent=2)
+
     chart = build_chart(synthetic_titers())
-    annotated = tap.plot(
-        synthetic_auspice(),
+    chart_spec_path = OUT_DIR / "synthetic_chart.json"
+    chart.save(str(chart_spec_path))
+
+    annotated = tree_annotated_plot.plot(
+        tree,
         chart,
         chart_strain_field="strain",
         tree_strain_field="name",
@@ -154,15 +172,13 @@ def main() -> None:
         tree_size=140,
     )
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     html_path = OUT_DIR / "synthetic_example.html"
     png_path = OUT_DIR / "synthetic_example.png"
-
     annotated.save(str(html_path))
     annotated.save(str(png_path), ppi=144)
 
-    print(f"wrote {html_path}")
-    print(f"wrote {png_path}")
+    for p in (tree_path, chart_spec_path, html_path, png_path):
+        print(f"wrote {p}")
 
 
 if __name__ == "__main__":

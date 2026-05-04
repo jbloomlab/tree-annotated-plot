@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 
 def _auspice() -> dict:
@@ -50,7 +50,7 @@ def _layer_marks(layers: list[dict]) -> list[dict]:
 def test_defaults_yield_three_layers() -> None:
     """With default styles (all three knobs > 0) and scale_bar=False, the
     tree has three layers: leaders, branches, tip-circles."""
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -64,7 +64,7 @@ def test_defaults_yield_three_layers() -> None:
 
 
 def test_tree_line_width_propagates() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -81,7 +81,7 @@ def test_tree_line_width_propagates() -> None:
 
 
 def test_tree_node_size_propagates() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -95,7 +95,7 @@ def test_tree_node_size_propagates() -> None:
 
 
 def test_leader_line_width_propagates() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -112,7 +112,7 @@ def test_leader_line_width_propagates() -> None:
 
 
 def test_tree_node_size_zero_disables_tip_circles() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -127,7 +127,7 @@ def test_tree_node_size_zero_disables_tip_circles() -> None:
 
 
 def test_leader_line_width_zero_disables_leader_layer() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -143,7 +143,7 @@ def test_leader_line_width_zero_disables_leader_layer() -> None:
 
 
 def test_both_disabled_leaves_only_branches() -> None:
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
@@ -168,7 +168,7 @@ def test_both_disabled_leaves_only_branches() -> None:
 )
 def test_negative_style_raises(kwarg: str, bad: float) -> None:
     with pytest.raises(ValueError, match=kwarg):
-        tap.plot(
+        tree_annotated_plot.plot(
             _auspice(),
             _chart(),
             chart_strain_field="strain",

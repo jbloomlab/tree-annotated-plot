@@ -7,6 +7,8 @@
 This is a Python package from the [Bloom lab](https://jbloomlab.org/) that allows you to combine an Altair / Vega-Lite plot with a Nextstrain JSON of a phylogenetic tree so that the tree is aligned to annotate strains on the axis of the plot.
 See [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/) for detailed documentation.
 
+> **Note:** charts must be saved from altair 6+ (Vega-Lite v6). Older specs raise by default; pass `--no-strict-version` (CLI) or `strict_version=False` (Python) to override at your own risk. See the [docs](https://jbloomlab.github.io/tree-annotated-plot/) for details.
+
 ## Notes for developing the package
 
 ### Installation (development)
@@ -54,22 +56,22 @@ bash scripts/build_docs.sh
 ```
 
 This first runs `scripts/generate_docs_assets.py` (so the example
-PNGs and interactive HTMLs exist before MkDocs reads `docs/`), then
+SVGs and interactive HTMLs exist before MkDocs reads `docs/`), then
 `mkdocs build --strict`. Output lands in `site/`.
 
 ### Adding a new example
 
 The docs follow a single template per example: a short motivation,
-a code excerpt, an embedded PNG screenshot, a link to the
-fully-interactive standalone HTML, and the commands to reproduce.
-[`docs/examples.md`](docs/examples.md) shows the existing shape. To
-add another:
+an embedded SVG screenshot, a link to the fully-interactive
+standalone HTML, and the commands to reproduce (CLI form first,
+Python API form second). [`docs/examples.md`](docs/examples.md)
+shows the existing shape. To add another:
 
 1. Drop a runnable script into `examples/`. Keep helpers at module
    level (callable from outside) so the asset script can import them.
 2. Add a clause to `scripts/generate_docs_assets.py` that imports
-   the script and calls `tap.plot(...)` followed by saving both
-   `<name>.png` (into `docs/images/`) and `<name>.html` (into
+   the script and calls `tree_annotated_plot.plot(...)` followed by saving both
+   `<name>.svg` (into `docs/images/`) and `<name>.html` (into
    `docs/charts/`). Both directories are gitignored — only the
    asset script writes there.
 3. Add a section to `docs/examples.md` matching the template.

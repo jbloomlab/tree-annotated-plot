@@ -1,16 +1,23 @@
 """`PlotConfig`: the single source of truth for plot-parameter descriptions.
 
-Both `tap.plot` and the CLI consume `PlotConfig`. The `Annotated[T, str]`
-metadata on each field doubles as the parameter description: it's pulled
-into the function's `Args:` block at runtime (via the docstring decorator
-in this module), and into each click option's `help` text by
-`tree_annotated_plot.cli`. Adding a new parameter therefore takes one
-edit (a new field with description), not three.
+Both `tree_annotated_plot.plot` and the CLI consume `PlotConfig`. Each
+field's `Annotated[T, str]` metadata is the canonical description: it
+is pulled into the function's docstring at import time (via
+`_render_numpy_params`, called from `_plot.py`), and into each click
+option's `help` text by `tree_annotated_plot.cli`. Adding or editing a
+parameter description therefore takes one edit, not two.
+
+For the rare case where the Python docstring needs more prose than the
+CLI `--help` (e.g. cross-references to Python-only concepts), add an
+entry to `PARAM_DOC_EXTRAS` keyed by the field name; the extra prose
+is appended to that field's description in the docstring only.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import textwrap
+import typing
 from typing import Annotated, Literal
 
 TreeLocation = Literal["left", "right", "top", "bottom"]
@@ -18,12 +25,11 @@ TreeLocation = Literal["left", "right", "top", "bottom"]
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class PlotConfig:
-    """Configuration for `tap.plot`.
+    """Configuration for `tree_annotated_plot.plot`.
 
     Each field's type annotation is `Annotated[T, "<description>"]`. The
-    description is the canonical text that appears in the function
-    docstring, the click `--help`, and (later, in Phase 2j) the rendered
-    docs site.
+    description is the canonical text that appears in the function's
+    docstring, the click `--help` text, and the rendered Python API page.
     """
 
     chart_strain_field: Annotated[
@@ -43,31 +49,23 @@ class PlotConfig:
     branch_length: Annotated[
         Literal["div", "num_date"],
         "Required. Which Auspice node attribute supplies branch lengths. "
-        '"div" reads node_attrs.div (a scalar absolute divergence from '
-        'the root). "num_date" reads node_attrs.num_date.value (calendar '
-        "position in years). Specifying this explicitly keeps the units "
-        "of the branch axis unambiguous and prevents the package from "
-        "guessing the wrong field for trees that carry both.",
+        '"div" means divergence branch lengths; "num_date" means calendar '
+        "dates.",
     ]
 
     tree_size: Annotated[
         int,
-        "Size in pixels of the tree's branch axis (the dimension "
-        "perpendicular to the strain rows). For vertical layout (chart "
-        "strain on `y`) this is the tree panel's *width*; for horizontal "
-        "layout (chart strain on `x`) this is the tree panel's *height*. "
-        "The tree's tip-axis dimension is computed from the chart's "
-        "strain dimension so tips align row-for-row with chart rows.",
+        "Size in pixels of tree depth. For vertical layout (chart strain on "
+        "`y`) this is the tree panel's *width*; for horizontal layout (chart "
+        "strain on `x`) this is the tree panel's *height*.",
     ] = 100
 
     tree_location: Annotated[
         TreeLocation | None,
-        "Where to draw the tree relative to the chart. y-encoded strain "
-        'accepts "left" (default) or "right"; x-encoded strain accepts '
-        '"bottom" (default) or "top". Defaults match where Vega-Lite '
-        "renders strain-axis labels by default, so tips align with the "
-        "labels. Specifying a value incompatible with the strain axis "
-        "raises ValueError.",
+        "Which side of the chart to draw the tree on. Defaults to the side "
+        'with the strain-axis labels ("left" for y-encoded strain, "bottom" '
+        'for x-encoded). Other valid values: "right" (y-encoded), "top" '
+        "(x-encoded).",
     ] = None
 
     tree_line_width: Annotated[
@@ -79,7 +77,7 @@ class PlotConfig:
         float,
         "Area (px²) of the small filled circles drawn at each tip. "
         "Default 28. Setting tree_node_size=0 disables the tip-circle "
-        "layer entirely. Negative values raise.",
+        "layer entirely.",
     ] = 28
 
     leader_line_width: Annotated[
@@ -87,26 +85,23 @@ class PlotConfig:
         "Stroke width (px) for the dashed leader lines that connect each "
         "tip's branch endpoint to the strain row when the branch doesn't "
         "extend all the way to branch_max. Default 1.0. Setting "
-        "leader_line_width=0 disables the leader-line layer entirely. "
-        "Negative values raise.",
+        "leader_line_width=0 disables the leader-line layer entirely.",
     ] = 1.0
 
     scale_bar: Annotated[
         bool,
         "Off by default. When on, adds a small bar in the tree panel "
-        'whose length corresponds to a "nice" number (largest 1/2/5 * 10^k '
-        "≤ 25% of the branch range). Sits at the tail end of the tip "
-        "axis in extra pixel space, so tip-row alignment with the chart "
-        "is preserved.",
+        "showing the branch-length scale. Tip-row alignment with the "
+        "chart is preserved.",
     ] = False
 
     branch_length_units: Annotated[
         str | None,
         'Used only when scale_bar is on and branch_length="div": the unit '
         "string pasted after the bar's numeric length (e.g. "
-        '"substitutions/site"). None renders unitless. We do not '
-        'auto-detect divergence units. For branch_length="num_date" the '
-        "label is always in years/months and this argument is ignored.",
+        '"substitutions/site"). None renders unitless. For '
+        'branch_length="num_date" the label is always in years/months '
+        "and this argument is ignored.",
     ] = None
 
     prune_tree_to_chart: Annotated[
@@ -121,22 +116,100 @@ class PlotConfig:
 
     strict_version: Annotated[
         bool,
-        "Controls how mismatched-version inputs are handled. When on "
-        "(default), known-stale specs raise: Vega-Lite 5 or earlier, "
-        "and Auspice JSON whose `version` is not v2. When off, those "
-        "same cases become warnings and parsing proceeds. Vega-Lite "
-        "*newer* than the targeted version (currently 6) is always a "
-        "warning regardless of this flag — it's untested but Vega-Lite "
-        "tends to stay backward-compatible. Has no effect on a live "
-        "alt.Chart (the constructing altair version is necessarily the "
-        "running altair version).",
+        "When on (default), known-stale specs raise: Vega-Lite 5 or "
+        "earlier, and Auspice JSON whose `version` is not v2. When off, "
+        "those become warnings and parsing proceeds.",
     ] = True
+
+
+# Sidecar for Python-docstring-only prose, keyed by PlotConfig field name.
+# Empty by default — add an entry when a field's docstring entry needs more
+# than the CLI `--help` text covers. The extras are appended to the field's
+# description in `tree_annotated_plot.plot.__doc__`, never in CLI --help.
+PARAM_DOC_EXTRAS: dict[str, str] = {}
+
+
+# Descriptions for the three data-input parameters. These can't live on
+# PlotConfig because their *types* differ between surfaces (Python accepts
+# live objects; the CLI accepts only file paths), but their descriptions
+# can — and should — be single-sourced. The CLI reads these for its --help
+# text; the Python docstring header in `_plot.py` interpolates them too.
+TREE_DESCRIPTION = (
+    "Phylogenetic tree in Auspice JSON v2 format. The CLI accepts a file "
+    "path; the Python API additionally accepts a parsed dict or a "
+    "pre-built `tree_annotated_plot.TreeNode`."
+)
+
+CHART_DESCRIPTION = (
+    "Vega-Lite chart whose strain axis the tree will annotate. The CLI "
+    "accepts a saved spec on disk — either *.json (canonical) or *.html "
+    "(extracted from altair's default save template). The Python API "
+    "additionally accepts a live `altair.Chart`-or-subclass object or a "
+    "parsed spec dict. Must encode `chart_strain_field` on `x` or `y`."
+)
+
+OUTPUT_DESCRIPTION = (
+    "Where to save the combined plot. Format inferred from extension: "
+    ".html, .json, .png, .svg, .pdf."
+)
 
 
 def field_description(field_name: str) -> str:
     """Return the Annotated description of a PlotConfig field."""
-    import typing
-
     hints = typing.get_type_hints(PlotConfig, include_extras=True)
     annotated = hints[field_name]
     return annotated.__metadata__[0]
+
+
+def _render_data_param(name: str, description: str, width: int = 75) -> str:
+    """Render one NumPy-style parameter block for a non-PlotConfig data input.
+
+    Used by `_plot.py` to fold the `tree` and `chart` descriptions
+    (`TREE_DESCRIPTION`, `CHART_DESCRIPTION`) into `plot.__doc__` in the same
+    NumPy shape as the PlotConfig-derived parameters rendered by
+    `_render_numpy_params`.
+    """
+    body = textwrap.fill(
+        description, width=width, initial_indent="    ", subsequent_indent="    "
+    )
+    return f"{name}\n{body}"
+
+
+def _render_numpy_params(
+    extras: dict[str, str] | None = None,
+    width: int = 75,
+) -> str:
+    """Render PlotConfig fields as the body of a NumPy `Parameters` block.
+
+    Returns the per-field entries only — callers prepend the
+    `Parameters\\n----------` section header. Each entry is the field
+    name on its own line, followed by the field's `Annotated` description
+    (and any matching `extras` prose) indented by four spaces and word-wrapped
+    to `width`.
+    """
+    extras = extras or {}
+    hints = typing.get_type_hints(PlotConfig, include_extras=True)
+    chunks: list[str] = []
+    for field in dataclasses.fields(PlotConfig):
+        name = field.name
+        description = hints[name].__metadata__[0]
+        chunks.append(name)
+        chunks.append(
+            textwrap.fill(
+                description,
+                width=width,
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
+        )
+        if name in extras:
+            chunks.append("")
+            chunks.append(
+                textwrap.fill(
+                    extras[name],
+                    width=width,
+                    initial_indent="    ",
+                    subsequent_indent="    ",
+                )
+            )
+    return "\n".join(chunks)

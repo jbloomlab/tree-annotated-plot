@@ -33,9 +33,9 @@ theme:
 
 nav:
   - Home: index.md
-  - Python API: python-api.md
-  - Command line: cli.md
   - Examples: examples.md
+  - Command line: cli.md
+  - Python API: python-api.md
 
 plugins:
   - search
@@ -54,6 +54,7 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
   - mkdocs-click
   - pymdownx.highlight
   - pymdownx.superfences

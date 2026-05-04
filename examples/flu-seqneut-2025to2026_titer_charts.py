@@ -349,7 +349,7 @@ def make_chart(
     # For the horizontal layout (chart_type="lines", H1N1), the strain labels
     # render at the bottom of the faceted chart. Putting the cohort legend
     # ABOVE the faceted chart keeps the strain labels at the bottom edge of
-    # the saved chart — so when this package's tap.plot vconcats a tree
+    # the saved chart — so when this package's tree_annotated_plot.plot vconcats a tree
     # underneath, the tree's tips end up flush with the strain labels.
     # For the vertical layout (H3N2), the strain labels are on the left
     # of the faceted chart and the legend's vertical position doesn't

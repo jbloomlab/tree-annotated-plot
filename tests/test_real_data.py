@@ -1,6 +1,6 @@
 """Real-data invariants for the Kikawa H3N2 / H1N1 example.
 
-These tests lock down the assumptions that later phases of `tap.plot` will
+These tests lock down the assumptions that later phases of `tree_annotated_plot.plot` will
 depend on, so upstream drift in the Auspice JSONs or the chart-builder gets
 caught before it breaks downstream code rather than after.
 
@@ -11,7 +11,7 @@ them locally:
     .venv/bin/python examples/flu-seqneut-2025to2026_titer_charts.py
     .venv/bin/pytest tests/test_real_data.py
 
-The end-to-end `tap.plot(real_chart, real_tree, ...)` invocation lives in
+The end-to-end `tree_annotated_plot.plot(real_chart, real_tree, ...)` invocation lives in
 later phases; this module validates only the data shape.
 """
 
@@ -197,7 +197,7 @@ def _build_subtype_chart(subtype: str, chart_type: str):
 
 
 def test_h3n2_end_to_end_via_tap_plot() -> None:
-    """tap.plot against the real H3N2 chart + Auspice tree.
+    """tree_annotated_plot.plot against the real H3N2 chart + Auspice tree.
 
     The H3N2 chart is vertical (strain on y) → output is HConcatChart with
     the tree on the left and the chart on the right. The chart panel's
@@ -205,7 +205,7 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
     """
     import altair as alt
 
-    import tree_annotated_plot as tap
+    import tree_annotated_plot
 
     auspice = DATA_DIR / "flu-seqneut-2025to2026_H3N2.json"
     if not auspice.exists():
@@ -215,7 +215,7 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
         )
 
     chart = _build_subtype_chart("H3N2", "iqr")
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         str(auspice),
         chart,
         chart_strain_field="axis_label",
@@ -269,7 +269,7 @@ def test_h3n2_end_to_end_via_tap_plot() -> None:
 
 
 def test_h1n1_end_to_end_via_tap_plot() -> None:
-    """tap.plot against the real H1N1 chart + Auspice tree.
+    """tree_annotated_plot.plot against the real H1N1 chart + Auspice tree.
 
     The H1N1 chart is horizontal (strain on x). The default
     `tree_location` for x-encoded strain is "bottom" so the tree's tips
@@ -279,7 +279,7 @@ def test_h1n1_end_to_end_via_tap_plot() -> None:
     """
     import altair as alt
 
-    import tree_annotated_plot as tap
+    import tree_annotated_plot
 
     auspice = DATA_DIR / "flu-seqneut-2025to2026_H1N1.json"
     if not auspice.exists():
@@ -289,7 +289,7 @@ def test_h1n1_end_to_end_via_tap_plot() -> None:
         )
 
     chart = _build_subtype_chart("H1N1", "lines")
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         str(auspice),
         chart,
         chart_strain_field="axis_label",

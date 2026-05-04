@@ -18,7 +18,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 
 
 def _auspice_4_tip() -> dict:
@@ -72,7 +72,7 @@ def _kw():
 def test_default_for_y_strain_is_left() -> None:
     """tree_location=None on a y-encoded chart → tree on the left → tree
     is the first panel of the HConcatChart."""
-    out = tap.plot(_auspice_4_tip(), _vertical_chart(), **_kw())
+    out = tree_annotated_plot.plot(_auspice_4_tip(), _vertical_chart(), **_kw())
     assert isinstance(out, alt.HConcatChart)
     d = out.to_dict()
     # Tree is the panel that has `width` set explicitly to our default
@@ -84,7 +84,7 @@ def test_default_for_y_strain_is_left() -> None:
 def test_default_for_x_strain_is_bottom() -> None:
     """tree_location=None on an x-encoded chart → tree below → tree is
     vconcat[1] (chart at vconcat[0])."""
-    out = tap.plot(_auspice_4_tip(), _horizontal_chart(), **_kw())
+    out = tree_annotated_plot.plot(_auspice_4_tip(), _horizontal_chart(), **_kw())
     assert isinstance(out, alt.VConcatChart)
     d = out.to_dict()
     # Tree panel's height = our default tree_size (100); chart panel's
@@ -97,7 +97,9 @@ def test_default_for_x_strain_is_bottom() -> None:
 
 
 def test_explicit_right_puts_tree_on_right_of_hconcat() -> None:
-    out = tap.plot(_auspice_4_tip(), _vertical_chart(), tree_location="right", **_kw())
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), _vertical_chart(), tree_location="right", **_kw()
+    )
     assert isinstance(out, alt.HConcatChart)
     d = out.to_dict()
     assert d["hconcat"][0]["width"] == 200  # chart on left
@@ -105,7 +107,9 @@ def test_explicit_right_puts_tree_on_right_of_hconcat() -> None:
 
 
 def test_explicit_top_puts_tree_above_vconcat() -> None:
-    out = tap.plot(_auspice_4_tip(), _horizontal_chart(), tree_location="top", **_kw())
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), _horizontal_chart(), tree_location="top", **_kw()
+    )
     assert isinstance(out, alt.VConcatChart)
     d = out.to_dict()
     assert d["vconcat"][0]["height"] == 100  # tree on top
@@ -116,7 +120,9 @@ def test_right_flips_tree_branch_direction() -> None:
     """tree_location=right inverts the branch_scale domain so tips face
     left (toward the chart that's on the left). The encoded x scale's
     domain order is the visible signal."""
-    out = tap.plot(_auspice_4_tip(), _vertical_chart(), tree_location="right", **_kw())
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), _vertical_chart(), tree_location="right", **_kw()
+    )
     tree_panel = out.to_dict()["hconcat"][1]
     # Find the branch x-scale on the tree panel. It lives on a layer
     # encoding's x.scale.domain.
@@ -131,7 +137,9 @@ def test_top_keeps_branch_growing_downward() -> None:
     """tree_location=top: root at top, tips at bottom. On Vega-Lite y the
     domain order [max, min] places domain[0] at bottom and domain[1] at
     top, so root (small div) ends up at the top."""
-    out = tap.plot(_auspice_4_tip(), _horizontal_chart(), tree_location="top", **_kw())
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), _horizontal_chart(), tree_location="top", **_kw()
+    )
     tree_panel = out.to_dict()["vconcat"][0]
     layer = tree_panel["layer"][1]
     y_dom = layer["encoding"]["y"]["scale"]["domain"]
@@ -144,19 +152,27 @@ def test_top_keeps_branch_growing_downward() -> None:
 
 def test_top_with_y_encoded_strain_raises() -> None:
     with pytest.raises(ValueError, match="incompatible with a y-encoded"):
-        tap.plot(_auspice_4_tip(), _vertical_chart(), tree_location="top", **_kw())
+        tree_annotated_plot.plot(
+            _auspice_4_tip(), _vertical_chart(), tree_location="top", **_kw()
+        )
 
 
 def test_bottom_with_y_encoded_strain_raises() -> None:
     with pytest.raises(ValueError, match="incompatible with a y-encoded"):
-        tap.plot(_auspice_4_tip(), _vertical_chart(), tree_location="bottom", **_kw())
+        tree_annotated_plot.plot(
+            _auspice_4_tip(), _vertical_chart(), tree_location="bottom", **_kw()
+        )
 
 
 def test_left_with_x_encoded_strain_raises() -> None:
     with pytest.raises(ValueError, match="incompatible with an x-encoded"):
-        tap.plot(_auspice_4_tip(), _horizontal_chart(), tree_location="left", **_kw())
+        tree_annotated_plot.plot(
+            _auspice_4_tip(), _horizontal_chart(), tree_location="left", **_kw()
+        )
 
 
 def test_right_with_x_encoded_strain_raises() -> None:
     with pytest.raises(ValueError, match="incompatible with an x-encoded"):
-        tap.plot(_auspice_4_tip(), _horizontal_chart(), tree_location="right", **_kw())
+        tree_annotated_plot.plot(
+            _auspice_4_tip(), _horizontal_chart(), tree_location="right", **_kw()
+        )

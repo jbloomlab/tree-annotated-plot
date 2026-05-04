@@ -13,7 +13,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-import tree_annotated_plot as tap
+import tree_annotated_plot
 from tree_annotated_plot import _tree
 
 # ---------- fixtures ----------
@@ -81,7 +81,7 @@ def test_chart_strain_not_in_tree_is_fatal_default() -> None:
     the tree has all 5 chart-shared strains too."""
     chart = _chart_for_strains(["A1", "A2", "A3", "B1", "B2", "X"])
     with pytest.raises(ValueError, match="not present in the tree"):
-        tap.plot(
+        tree_annotated_plot.plot(
             _auspice_two_clades(),
             chart,
             chart_strain_field="strain",
@@ -95,7 +95,7 @@ def test_chart_strain_not_in_tree_is_fatal_even_with_prune() -> None:
     not in the tree still raises — pruning would silently lose plot data."""
     chart = _chart_for_strains(["A1", "A2", "X"])
     with pytest.raises(ValueError, match="not present in the tree"):
-        tap.plot(
+        tree_annotated_plot.plot(
             _auspice_two_clades(),
             chart,
             chart_strain_field="strain",
@@ -113,7 +113,7 @@ def test_tree_tip_not_in_chart_is_fatal_default() -> None:
     suggests `prune_tree_to_chart=True`."""
     chart = _chart_for_strains(["A1", "A2", "A3"])
     with pytest.raises(ValueError, match="prune_tree_to_chart=True"):
-        tap.plot(
+        tree_annotated_plot.plot(
             _auspice_two_clades(),
             chart,
             chart_strain_field="strain",
@@ -126,7 +126,7 @@ def test_tree_tip_not_in_chart_succeeds_with_prune() -> None:
     """With `prune_tree_to_chart=True`, dropped tips are removed from the
     tree and drawing succeeds."""
     chart = _chart_for_strains(["A1", "A2", "A3"])
-    out = tap.plot(
+    out = tree_annotated_plot.plot(
         _auspice_two_clades(),
         chart,
         chart_strain_field="strain",
@@ -222,7 +222,7 @@ def test_duplicate_tree_strain_field_values_are_fatal() -> None:
     }
     chart = _chart_for_strains(["DUP", "OK"])
     with pytest.raises(ValueError, match="duplicate values across tips"):
-        tap.plot(
+        tree_annotated_plot.plot(
             bad_tree,
             chart,
             chart_strain_field="strain",
@@ -253,7 +253,7 @@ def test_error_message_contains_sample_values_and_candidate_hint() -> None:
         .properties(width=200, height=200)
     )
     with pytest.raises(ValueError) as excinfo:
-        tap.plot(
+        tree_annotated_plot.plot(
             _auspice_two_clades(),
             chart,
             chart_strain_field="cohort",  # wrong choice on chart side
