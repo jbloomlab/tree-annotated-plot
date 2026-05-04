@@ -1,76 +1,48 @@
-# tree-annotated-plot
+# `tree-annotated-plot`: annotate the axis of an Altair / Vega-Lite plot with a phylogenetic tree
 
-Plot a phylogenetic tree alongside an Altair / Vega-Lite chart whose
-categorical axis is reordered to match the tree's tip order.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-The tree dictates strain order; the chart follows. The chart's
-sort is overridden so each row sits next to the matching tree tip.
+This is a Python package from the [Bloom lab](https://jbloomlab.org/) that allows you to combine an Altair / Vega-Lite plot with a Nextstrain JSON of a phylogenetic tree so that the tree is aligned to annotate strains on the axis of the plot.
+See [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/) for detailed documentation.
 
-## Quickstart
+## Notes for developing the package
 
-### Python
-
-```python
-import altair as alt
-import pandas as pd
-import tree_annotated_plot as tap
-
-df = pd.DataFrame(
-    [{"strain": s, "serum": "s1", "titer": v}
-     for s, v in [("A", 100), ("B", 200), ("C", 400), ("D", 800)]]
-)
-chart = (
-    alt.Chart(df)
-    .mark_circle()
-    .encode(x="titer:Q", y="strain:N")
-    .properties(width=300, height=200)
-)
-
-out = tap.plot(
-    "h3n2.auspice.json", chart,
-    chart_strain_field="strain",
-    tree_strain_field="name",
-    branch_length="div",
-)
-out.save("combined.html")
-```
-
-### Command line
+### Installation (development)
 
 ```bash
-tree-annotated-plot \
-    --tree h3n2.auspice.json \
-    --chart-spec titers.json \
-    --output combined.html \
-    --chart-strain-field axis_label \
-    --tree-strain-field derived_haplotype \
-    --branch-length div
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev,docs]"
 ```
 
-`--chart-spec` accepts both `*.json` and `*.html` saved by altair's
-`chart.save(...)`. The output extension determines the format
-(`.html` / `.json` / `.png` / `.svg` / `.pdf`).
+[pyproject.toml](pyproject.toml) is the canonical source for the supported Python
+version and runtime dependencies.
 
-## Documentation
-
-The canonical reference is the docs site at
+### Documentation
+The docs are at
 [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.io/tree-annotated-plot/).
-It's auto-deployed by GitHub Actions on every push to `main` —
+They are auto-deployed by GitHub Actions on every push to `main` —
 [`.github/workflows/docs.yml`](.github/workflows/docs.yml) installs
 the package + docs extras, runs
 [`scripts/generate_docs_assets.py`](scripts/generate_docs_assets.py)
-to render PNG screenshots and standalone interactive HTML for each
+to render images and standalone interactive HTML for each
 example, then `mkdocs build --strict`, and uploads `site/` as a
 GitHub Pages artifact.
 
-### Building locally
+### Building documentation locally
 
 For day-to-day editing of the docs, use MkDocs's live-reload server
 (saves go straight to your browser):
 
 ```bash
-pip install -e ".[docs]"
 mkdocs serve              # http://localhost:8000
+```
+
+To do this on the Fred Hutch remote server, do:
+```bash
+mkdocs serve -a $(hostname -i | awk '{print $1}'):$(fhfreeport)
 ```
 
 For the strict build that matches CI (catches broken
@@ -104,18 +76,3 @@ add another:
 4. Run `bash scripts/build_docs.sh` and open `site/examples.html`
    to verify. Push when happy; the deployed site updates on the
    next CI run.
-
-## Installation (development)
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev,docs]"
-```
-
-`pyproject.toml` is the canonical source for the supported Python
-version and runtime dependencies.
-
-## License
-
-Released under the [MIT License](LICENSE).

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "tree-annotated-plot"
 version = "0.0.1"
-description = "Generate plots with a categorical axis aligned to a phylogenetic tree."
+description = "Annotate the axis of an Altair / Vega-Lite plot with a phylogenetic tree."
 readme = "README.md"
 requires-python = ">=3.13"
 license = { file = "LICENSE" }
@@ -26,6 +26,7 @@ dependencies = [
 ]
 
 [project.urls]
+Documentation = "https://jbloomlab.github.io/tree-annotated-plot/"
 Homepage = "https://github.com/jbloomlab/tree-annotated-plot"
 Repository = "https://github.com/jbloomlab/tree-annotated-plot"
 Issues = "https://github.com/jbloomlab/tree-annotated-plot/issues"

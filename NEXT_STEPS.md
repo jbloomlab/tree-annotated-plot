@@ -29,6 +29,7 @@ hypothetical Phase 3 work is left.
    git commit -am "release v0.1.0" && git tag v0.1.0
    git push && git push --tags
    ```
+5. **Add a GitHub action to run the tests**: this should include running any tests, examples, linting, and code formatting
 
 ## Phase 3 candidate features (deferred from Phase 2)
 
@@ -76,6 +77,8 @@ adding the next round of features:
   altair warning** that appears when the Kikawa chart-builder runs.
   Pre-existing and cosmetic, but it'd be cleaner to silence
   (probably needs explicit `name=` on the selection params).
+- **Add badges to README** Add badges for GitHub Actions test and PyPI version to the README.
+  Is there also a badge I can add for the docs, or other badges to consider?
 
 ## State at session close
 
