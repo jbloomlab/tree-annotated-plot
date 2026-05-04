@@ -94,6 +94,73 @@ def test_tree_node_size_propagates() -> None:
     assert any(m.get("size") == 80 for m in circle_marks)
 
 
+def _circle_layer(out: alt.HConcatChart | alt.VConcatChart) -> dict:
+    """Return the tip-circle layer dict from the tree panel of `out`.
+
+    Works for both vertical (HConcatChart, tree on left) and horizontal
+    (VConcatChart, tree on bottom by default for an x-encoded strain) layouts.
+    """
+    container = out.to_dict()
+    tree_panel = (
+        container["hconcat"][0] if "hconcat" in container else container["vconcat"][1]
+    )
+    circle_layers = [
+        layer
+        for layer in tree_panel["layer"]
+        if layer.get("mark", {}).get("type") == "circle"
+    ]
+    assert (
+        len(circle_layers) == 1
+    ), f"expected exactly one tip-circle layer, got {len(circle_layers)}"
+    return circle_layers[0]
+
+
+def test_tip_circles_have_strain_tooltip_vertical() -> None:
+    """Vertical layout (chart strain on y → tree on left): each tip circle
+    should expose the strain name as a tooltip on hover."""
+    out = tree_annotated_plot.plot(
+        _auspice(),
+        _chart(),
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
+    encoding = _circle_layer(out)["encoding"]
+    assert "tooltip" in encoding, "tip-circle layer should encode a tooltip"
+    tooltip = encoding["tooltip"]
+    assert tooltip.get("field") == "name"
+    assert tooltip.get("type") == "nominal"
+    assert tooltip.get("title") == "strain"
+
+
+def test_tip_circles_have_strain_tooltip_horizontal() -> None:
+    """Horizontal layout (chart strain on x → tree on bottom): same
+    tooltip should be present."""
+    horizontal_chart = (
+        alt.Chart(
+            pd.DataFrame(
+                {"strain": ["A", "B", "C", "D"], "titer": [1.0, 2.0, 4.0, 8.0]}
+            )
+        )
+        .mark_circle()
+        .encode(x=alt.X("strain:N"), y="titer:Q")
+        .properties(width=200, height=200)
+    )
+    out = tree_annotated_plot.plot(
+        _auspice(),
+        horizontal_chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
+    encoding = _circle_layer(out)["encoding"]
+    assert "tooltip" in encoding, "tip-circle layer should encode a tooltip"
+    tooltip = encoding["tooltip"]
+    assert tooltip.get("field") == "name"
+    assert tooltip.get("type") == "nominal"
+    assert tooltip.get("title") == "strain"
+
+
 def test_leader_line_width_propagates() -> None:
     out = tree_annotated_plot.plot(
         _auspice(),

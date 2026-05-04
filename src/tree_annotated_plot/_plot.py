@@ -1267,7 +1267,11 @@ def _build_tree_chart(
             layers.append(
                 alt.Chart(tips_df)
                 .mark_circle(size=tree_node_size, color="black")
-                .encode(x=branch_enc, y=tip_enc)
+                .encode(
+                    x=branch_enc,
+                    y=tip_enc,
+                    tooltip=alt.Tooltip("name:N", title="strain"),
+                )
             )
         if scale_bar_layer is not None:
             layers.append(scale_bar_layer)
@@ -1311,7 +1315,11 @@ def _build_tree_chart(
             layers.append(
                 alt.Chart(tips_df)
                 .mark_circle(size=tree_node_size, color="black")
-                .encode(y=branch_enc, x=tip_enc)
+                .encode(
+                    y=branch_enc,
+                    x=tip_enc,
+                    tooltip=alt.Tooltip("name:N", title="strain"),
+                )
             )
         if scale_bar_layer is not None:
             layers.append(scale_bar_layer)
