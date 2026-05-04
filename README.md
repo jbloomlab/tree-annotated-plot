@@ -1,5 +1,9 @@
 # `tree-annotated-plot`: annotate the axis of an Altair / Vega-Lite plot with a phylogenetic tree
 
+[![PyPI version](https://img.shields.io/pypi/v/tree-annotated-plot.svg)](https://pypi.org/project/tree-annotated-plot/)
+[![Python versions](https://img.shields.io/pypi/pyversions/tree-annotated-plot.svg)](https://pypi.org/project/tree-annotated-plot/)
+[![tests](https://github.com/jbloomlab/tree-annotated-plot/actions/workflows/tests.yml/badge.svg)](https://github.com/jbloomlab/tree-annotated-plot/actions/workflows/tests.yml)
+[![Docs](https://img.shields.io/github/deployments/jbloomlab/tree-annotated-plot/github-pages?label=docs)](https://jbloomlab.github.io/tree-annotated-plot/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -75,9 +79,9 @@ Then open `site/examples.html` in a browser and, for each example:
 If something visibly regresses, fix it before pushing — there's no
 CI gate that will catch a visual regression for you.
 
-### Continuous integration
+### Continuous integration tests
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs on every
 push to `main` and every pull request: it installs the package, fetches
 the upstream Kikawa Auspice JSONs (so the real-data tests actually
 exercise rather than skip), builds the Kikawa titer chart specs, and

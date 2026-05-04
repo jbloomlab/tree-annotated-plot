@@ -1,10 +1,16 @@
 # Run lint, format-check, and tests on every push to main and on every PR.
 #
+# The workflow `name` is "tests" because that's what the README badge
+# displays — readers (especially the biology audience) parse "tests
+# passing" more readily than "CI passing". Behaviorally, this workflow
+# also runs ruff and black (i.e. it's the project's full CI gate, not
+# only tests); the slight label overload is intentional.
+#
 # Local equivalent: `scripts/check.sh` (which expects a local .venv;
 # this workflow uses the runner's python directly so it doesn't depend
 # on that layout).
 
-name: ci
+name: tests
 
 on:
   push:

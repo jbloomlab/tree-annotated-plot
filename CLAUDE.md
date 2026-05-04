@@ -57,7 +57,7 @@
   scripts/check.sh
   ```
   The same three checks run in CI via
-  [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on push to
+  [`.github/workflows/tests.yml`](.github/workflows/tests.yml) on push to
   `main` and on PRs (CI also fetches the upstream Kikawa Auspice JSONs
   so real-data tests run rather than skip). Local green ≈ CI green.
 - **Build docs alongside checks** when changing public API surface:
