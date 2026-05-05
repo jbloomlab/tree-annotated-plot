@@ -70,15 +70,15 @@ class PlotConfig:
 
     tree_line_width: Annotated[
         float,
-        "Stroke width (px) for the tree's branch lines. Default 1.5.",
-    ] = 1.5
+        "Stroke width (px) for the tree's branch lines. Default 2.",
+    ] = 2.0
 
     tree_node_size: Annotated[
         float,
         "Area (px²) of the small filled circles drawn at each tip. "
-        "Default 28. Setting tree_node_size=0 disables the tip-circle "
+        "Default 45. Setting tree_node_size=0 disables the tip-circle "
         "layer entirely.",
-    ] = 28
+    ] = 45
 
     leader_line_width: Annotated[
         float,
@@ -153,6 +153,17 @@ class PlotConfig:
         "(negative) the chart. Default 0. Has no effect when "
         "connect_leader_to_label is off.",
     ] = 0
+
+    color_tree_by: Annotated[
+        str | None,
+        "Color the tree by an Auspice attribute. Pass a node_attrs key "
+        '(e.g. "subclade"), or "genotype:<GENE>:<SITE>" / '
+        '"genotype:<GENE>:<SITE1>,<SITE2>,..." (e.g. "genotype:HA1:158" '
+        'or "genotype:HA1:158,189") to color by the inferred genotype '
+        "state at a site or haplotype across sites. A categorical legend "
+        "is drawn below the plot; missing values are gray. None (default) "
+        "leaves the tree black.",
+    ] = None
 
 
 # Sidecar for Python-docstring-only prose, keyed by PlotConfig field name.
