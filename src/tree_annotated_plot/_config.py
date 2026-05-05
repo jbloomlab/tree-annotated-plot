@@ -121,6 +121,39 @@ class PlotConfig:
         "those become warnings and parsing proceeds.",
     ] = True
 
+    connect_leader_to_label: Annotated[
+        bool,
+        "Off (default): the chart's strain-axis labels are kept as the "
+        "user wrote them and dashed leader lines stop at the tree "
+        "panel's chart-facing edge. On: leaders extend all the way to "
+        "the labels — which requires moving the labels off the chart's "
+        "strain axis and into the tree panel, so the chart's "
+        "strain-axis labels, ticks, axis line, and title are SUPPRESSED "
+        "(any user-supplied `axis=...` is overridden) and replacement "
+        "labels are rendered alongside the tree. Label widths are "
+        "estimated; for crowded charts tune `strain_label_font_size` or "
+        "`shift_tree_loc`.",
+    ] = False
+
+    strain_label_font_size: Annotated[
+        float,
+        "Font size (px) for the strain text labels rendered in the tree "
+        "panel when `connect_leader_to_label` is on.",
+    ] = 10.0
+
+    strain_label_font_weight: Annotated[
+        Literal["normal", "bold"],
+        "Font weight for the strain text labels rendered in the tree panel "
+        "when `connect_leader_to_label` is on.",
+    ] = "normal"
+
+    shift_tree_loc: Annotated[
+        int,
+        "Pixels by which to shift the tree toward (positive) or away from "
+        "(negative) the chart. Default 0. Has no effect when "
+        "connect_leader_to_label is off.",
+    ] = 0
+
 
 # Sidecar for Python-docstring-only prose, keyed by PlotConfig field name.
 # Empty by default — add an entry when a field's docstring entry needs more
@@ -170,7 +203,11 @@ def _render_data_param(name: str, description: str, width: int = 75) -> str:
     `_render_numpy_params`.
     """
     body = textwrap.fill(
-        description, width=width, initial_indent="    ", subsequent_indent="    "
+        description,
+        width=width,
+        initial_indent="    ",
+        subsequent_indent="    ",
+        break_on_hyphens=False,
     )
     return f"{name}\n{body}"
 
@@ -200,6 +237,7 @@ def _render_numpy_params(
                 width=width,
                 initial_indent="    ",
                 subsequent_indent="    ",
+                break_on_hyphens=False,
             )
         )
         if name in extras:
@@ -210,6 +248,7 @@ def _render_numpy_params(
                     width=width,
                     initial_indent="    ",
                     subsequent_indent="    ",
+                    break_on_hyphens=False,
                 )
             )
     return "\n".join(chunks)

@@ -122,6 +122,33 @@ def _render_kikawa() -> None:
         )
         _save_pair(out, f"{basename}_combined")
 
+    # H3N2 again, with `connect_leader_to_label=True` and a 9-point label
+    # font: opt-in label connection where leaders run flush into the
+    # labels rendered alongside the tree (the default keeps the chart's
+    # natural strain-axis labels untouched).
+    h3n2_chart = builder.make_chart(
+        subtype="H3N2",
+        chart_type="iqr",
+        titers=titers,
+        viruses=viruses,
+        metadata=metadata,
+        all_cohorts=all_cohorts,
+    )
+    out = tree_annotated_plot.plot(
+        DATA_DIR / "flu-seqneut-2025to2026_H3N2.json",
+        h3n2_chart,
+        chart_strain_field="axis_label",
+        tree_strain_field="derived_haplotype",
+        branch_length="div",
+        tree_size=140,
+        scale_bar=True,
+        branch_length_units="substitutions",
+        connect_leader_to_label=True,
+        strain_label_font_size=9,
+        shift_tree_loc=60,
+    )
+    _save_pair(out, "h3n2_combined_label_connect")
+
 
 def main() -> None:
     """Render every example to SVG + interactive HTML under `docs/`."""

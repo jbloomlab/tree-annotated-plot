@@ -48,14 +48,16 @@ def _layer_marks(layers: list[dict]) -> list[dict]:
 
 
 def test_defaults_yield_three_layers() -> None:
-    """With default styles (all three knobs > 0) and scale_bar=False, the
-    tree has three layers: leaders, branches, tip-circles."""
+    """With default styles (all three knobs > 0), scale_bar=False, and
+    connect_leader_to_label=False, the tree has three layers: leaders,
+    branches, tip-circles."""
     out = tree_annotated_plot.plot(
         _auspice(),
         _chart(),
         chart_strain_field="strain",
         tree_strain_field="name",
         branch_length="div",
+        connect_leader_to_label=False,
     )
     assert len(_tree_layers(out)) == 3
 
@@ -186,6 +188,7 @@ def test_tree_node_size_zero_disables_tip_circles() -> None:
         tree_strain_field="name",
         branch_length="div",
         tree_node_size=0,
+        connect_leader_to_label=False,
     )
     marks = _layer_marks(_tree_layers(out))
     assert not any(m.get("type") == "circle" for m in marks)
@@ -201,6 +204,7 @@ def test_leader_line_width_zero_disables_leader_layer() -> None:
         tree_strain_field="name",
         branch_length="div",
         leader_line_width=0,
+        connect_leader_to_label=False,
     )
     marks = _layer_marks(_tree_layers(out))
     leader_marks = [m for m in marks if m.get("type") == "rule" and "strokeDash" in m]
@@ -218,6 +222,7 @@ def test_both_disabled_leaves_only_branches() -> None:
         branch_length="div",
         tree_node_size=0,
         leader_line_width=0,
+        connect_leader_to_label=False,
     )
     assert len(_tree_layers(out)) == 1
 

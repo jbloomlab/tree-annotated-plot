@@ -97,8 +97,39 @@ With the tree panel added by `tree-annotated-plot`:
 The strain axis is on `y`, so `tree_annotated_plot.plot` auto-picks
 the **vertical layout** (`tree_location` defaults to `"left"` on a
 y-encoded strain): result is an `HConcatChart` with the tree on the
-left, tips flush against the chart's strain labels, and a centered
-scale bar at the bottom of the tree panel.
+left and a centered scale bar at the bottom of the tree panel. The
+chart's natural strain-axis labels are kept exactly as the
+chart-builder wrote them (fonts, ticks, axis title, and all), and the
+tree's dashed leader lines stop at the tree panel's chart-facing
+edge.
+
+### Optional: connect leaders all the way to the labels
+
+If you'd prefer the dashed leaders to run flush into the strain
+labels themselves (with no break between tip and label), set
+`connect_leader_to_label=True`. This involves moving the labels off
+the chart's natural axis and into the tree panel, with a few
+trade-offs to be aware of:
+
+- The chart's strain-axis is replaced: any labels, ticks, title,
+  or custom `axis=...` you set on that encoding are dropped, and
+  replacement labels are rendered alongside the tree.
+- Label widths are estimated, not measured exactly, so layout may
+  need tuning. The two main knobs are `strain_label_font_size`
+  (default 10) and `shift_tree_loc` (a manual pixel offset that
+  moves the tree closer to the labels).
+
+The example below turns on label connection, shrinks the labels to
+9 pt, and uses `shift_tree_loc=60` to bring the tree flush against
+them:
+
+![H3N2 with label connection at 9pt font](images/h3n2_combined_label_connect.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_combined_label_connect.html){target="_blank"}
+
+CLI flags: `--connect-leader-to-label --strain-label-font-size 9
+--shift-tree-loc 60`. In Python:
+`connect_leader_to_label=True, strain_label_font_size=9, shift_tree_loc=60`.
 
 ### Reproduce — command line
 

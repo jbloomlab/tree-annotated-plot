@@ -40,6 +40,10 @@ def test_help_lists_auto_generated_options() -> None:
         "--tree-line-width",
         "--scale-bar / --no-scale-bar",
         "--strict-version / --no-strict-version",
+        "--connect-leader-to-label / --no-connect-leader-to-label",
+        "--strain-label-font-size",
+        "--strain-label-font-weight",
+        "--shift-tree-loc",
     ):
         assert opt in result.output, f"missing option in --help: {opt}"
 

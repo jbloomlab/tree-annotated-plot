@@ -29,6 +29,10 @@ pip install git+https://github.com/jbloomlab/tree-annotated-plot.git
 
 For a development checkout, see [Installation (development)](#installation-development) below.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the version history.
+
 ## Notes for developing the package
 
 ### Installation (development)

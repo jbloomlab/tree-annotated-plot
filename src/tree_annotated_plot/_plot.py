@@ -42,6 +42,10 @@ def plot(
     branch_length_units: str | None = None,
     prune_tree_to_chart: bool = False,
     strict_version: bool = True,
+    connect_leader_to_label: bool = False,
+    strain_label_font_size: float = 10.0,
+    strain_label_font_weight: Literal["normal", "bold"] = "normal",
+    shift_tree_loc: int = 0,
 ) -> alt.HConcatChart | alt.VConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`."""
     return _build(
@@ -60,6 +64,10 @@ def plot(
             branch_length_units=branch_length_units,
             prune_tree_to_chart=prune_tree_to_chart,
             strict_version=strict_version,
+            connect_leader_to_label=connect_leader_to_label,
+            strain_label_font_size=strain_label_font_size,
+            strain_label_font_weight=strain_label_font_weight,
+            shift_tree_loc=shift_tree_loc,
         ),
     )
 
@@ -167,11 +175,18 @@ def _build(
         scale_bar=config.scale_bar,
         branch_length=config.branch_length,
         branch_length_units=config.branch_length_units,
+        connect_leader_to_label=config.connect_leader_to_label,
+        strain_label_font_size=config.strain_label_font_size,
+        strain_label_font_weight=config.strain_label_font_weight,
+        shift_tree_loc=config.shift_tree_loc,
+        tip_names=tip_names,
     )
 
     new_chart = _apply_tree_order_to_chart_object(
         chart, config.chart_strain_field, tip_names
     )
+    if config.connect_leader_to_label:
+        _suppress_chart_strain_axis(new_chart, config.chart_strain_field)
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
     combined = _concat_for_location(
@@ -897,6 +912,33 @@ def _walk_and_apply_sort(
         _walk_and_apply_sort(spec, chart_strain_field, sort_order)
 
 
+def _suppress_chart_strain_axis(
+    chart: alt.TopLevelMixin, chart_strain_field: str
+) -> None:
+    """Hide labels, ticks, axis line, and title on every chart strain-axis encoding.
+
+    Walks the live altair object the same way `_walk_and_apply_sort` does
+    and replaces the matching encoding's ``axis`` with one that suppresses
+    every visible bit of axis chrome. This **overrides** any user-supplied
+    ``axis=alt.Axis(...)`` on those encodings; that's documented on the
+    ``connect_leader_to_label`` description in `_config.py`.
+    """
+    enc = _live_attr(chart, "encoding")
+    if enc is not None:
+        for channel in ("x", "y"):
+            ch = _live_attr(enc, channel)
+            if ch is not None and _channel_field(ch) == chart_strain_field:
+                ch.axis = alt.Axis(labels=False, ticks=False, domain=False, title=None)
+    for attr in ("hconcat", "vconcat", "concat", "layer"):
+        sub = _live_attr(chart, attr)
+        if isinstance(sub, list):
+            for s in sub:
+                _suppress_chart_strain_axis(s, chart_strain_field)
+    spec = _live_attr(chart, "spec")
+    if spec is not None:
+        _suppress_chart_strain_axis(spec, chart_strain_field)
+
+
 def _live_attr(obj: Any, name: str) -> Any:
     """Return obj.name unless it's missing or altair's Undefined sentinel."""
     v = getattr(obj, name, None)
@@ -1144,6 +1186,12 @@ def _build_scale_bar_layer(
     return bar + text
 
 
+_LABEL_PAD_PX_MIN = 4
+_LABEL_PAD_RATIO = 0.4  # `LABEL_PAD_PX = max(MIN, font_size * RATIO)`
+_LABEL_CHAR_PX_RATIO = 0.6  # rough proportional sans-serif glyph-width estimate
+_LABEL_HALO_RATIO = 0.6  # white-halo strokeWidth as a fraction of font_size
+
+
 def _build_tree_chart(
     root: _tree.TreeNode,
     *,
@@ -1158,6 +1206,11 @@ def _build_tree_chart(
     scale_bar: bool = False,
     branch_length: str = "div",
     branch_length_units: str | None = None,
+    connect_leader_to_label: bool = False,
+    strain_label_font_size: float = 10.0,
+    strain_label_font_weight: str = "normal",
+    shift_tree_loc: int = 0,
+    tip_names: list[str] | None = None,
 ) -> alt.Chart:
     """Build the tree panel.
 
@@ -1194,7 +1247,53 @@ def _build_tree_chart(
     )
     branch_max = float(seg_df[["x", "x2"]].max().max())
     branch_min = float(seg_df[["x", "x2"]].min().min())
-    leader_df = tips_df[tips_df["x"] < branch_max].assign(x2=branch_max)
+
+    # When connect_leader_to_label is on:
+    #   - All leaders extend to a single point: the panel's chart-facing edge
+    #     (`chart_edge_branch`).
+    #   - Each label is rendered as TWO `mark_text` layers stacked at the
+    #     same position: a white "halo" layer (white fill + thick white
+    #     stroke) drawn first, then the visible black text on top. The halo
+    #     follows the actual rendered glyph outline — auto-sized to the
+    #     text — and masks the dashed leader behind each label without any
+    #     width estimation. Vega-Lite doesn't expose `paintOrder`, so the
+    #     two-layer trick stands in for a single text-with-halo mark.
+    #   - `shift_tree_loc` (pixels) shrinks the strip — bringing the tree
+    #     visually closer to the labels — by reducing the data-units between
+    #     branch_max and chart_edge_branch. The tree's tree_size-pixel
+    #     allocation is unchanged.
+    # When connect_leader_to_label is off, the chart's natural strain-axis
+    # labels are kept and leaders stop at branch_max (the prior behavior).
+    halo_px = max(2.0, strain_label_font_size * _LABEL_HALO_RATIO)
+    if connect_leader_to_label:
+        names = tip_names if tip_names is not None else list(tips_df["name"])
+        max_name_len = max((len(n) for n in names), default=0)
+        char_px = strain_label_font_size * _LABEL_CHAR_PX_RATIO
+        label_pad_px = max(_LABEL_PAD_PX_MIN, strain_label_font_size * _LABEL_PAD_RATIO)
+        # Strip needs to fit the longest label plus `halo_px / 2` of halo
+        # extension on the leader-facing side, plus a small fixed pad.
+        label_pixel_width = label_pad_px + max_name_len * char_px + halo_px / 2
+        strip_pixel_width = label_pixel_width - shift_tree_loc
+        if strip_pixel_width <= 0:
+            raise ValueError(
+                f"shift_tree_loc={shift_tree_loc} eliminates the label strip "
+                f"(estimated label_pixel_width={label_pixel_width:.1f}); "
+                "reduce shift_tree_loc, lower strain_label_font_size, or "
+                "shorten the longest strain name."
+            )
+        branch_span = branch_max - branch_min
+        per_pixel = branch_span / tree_size if tree_size else 0.0
+        extra_branch_units = strip_pixel_width * per_pixel
+        chart_edge_branch = branch_max + extra_branch_units
+        tips_df = tips_df.assign(x_label=chart_edge_branch)
+        leader_df = tips_df[tips_df["x"] < chart_edge_branch].assign(
+            x2=chart_edge_branch
+        )
+        extended_tree_size = tree_size + strip_pixel_width
+    else:
+        chart_edge_branch = branch_max
+        leader_df = tips_df[tips_df["x"] < branch_max].assign(x2=branch_max)
+        extended_tree_size = tree_size
 
     # When scale_bar is on, extend the tip-axis past the last tip by
     # `_SCALE_BAR_EXTRA_PIXELS` and matching extra data units. Per-row pixel
@@ -1233,12 +1332,18 @@ def _build_tree_chart(
 
     if strain_axis == "y":
         # Vertical: branch axis on chart x; tip axis with tip 0 on top.
-        # tree_location flips the branch domain so tips face the chart side.
-        branch_domain = (
-            [branch_min, branch_max]
-            if tree_location == "left"
-            else [branch_max, branch_min]
-        )
+        # When connect_leader_to_label is on, the branch domain is extended
+        # past `branch_max` to `chart_edge_branch` so the label strip has
+        # data-units to occupy; tips at `branch_max` still sit at pixel
+        # `tree_size` on the panel. Each label's chart-facing edge is
+        # anchored at `chart_edge_branch` and aligned outward (right for
+        # tree on the left, left for tree on the right).
+        if tree_location == "left":
+            branch_domain = [branch_min, chart_edge_branch]
+            text_align = "right"
+        else:
+            branch_domain = [chart_edge_branch, branch_min]
+            text_align = "left"
         branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
         # tip-axis domain[0] (at panel bottom) extends past last tip when
         # scale_bar=True; tip i still sits at the same on-screen pixel.
@@ -1273,20 +1378,64 @@ def _build_tree_chart(
                     tooltip=alt.Tooltip("name:N", title="strain"),
                 )
             )
+        # Strain text label, drawn as two stacked layers: a white halo
+        # (white fill + thick white stroke) under the visible text. The
+        # halo auto-sizes to the rendered glyphs.
+        if connect_leader_to_label:
+            label_text_enc = dict(
+                x=alt.X("x_label:Q", scale=branch_scale, axis=None),
+                y=tip_enc,
+                text="name:N",
+            )
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_text(
+                    align=text_align,
+                    baseline="middle",
+                    fontSize=strain_label_font_size,
+                    fontWeight=strain_label_font_weight,
+                    fill="white",
+                    stroke="white",
+                    strokeWidth=halo_px,
+                    strokeJoin="round",
+                )
+                .encode(**label_text_enc)
+            )
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_text(
+                    align=text_align,
+                    baseline="middle",
+                    fontSize=strain_label_font_size,
+                    fontWeight=strain_label_font_weight,
+                )
+                .encode(**label_text_enc)
+            )
         if scale_bar_layer is not None:
             layers.append(scale_bar_layer)
         layered = alt.layer(*layers)
-        layered = layered.properties(width=tree_size, height=extended_strain_dim)
+        layered = layered.properties(
+            width=extended_tree_size, height=extended_strain_dim
+        )
     elif strain_axis == "x":
         # Horizontal: branch axis on chart y (Vega-Lite default has domain[1]
         # at the top); tip axis with tip 0 on the left.
-        # tree_location="top" → root at top → branch_max at bottom.
-        # tree_location="bottom" → root at bottom → branch_max at top.
-        branch_domain = (
-            [branch_max, branch_min]
-            if tree_location == "top"
-            else [branch_min, branch_max]
-        )
+        # tree_location="top" → root at top → branch_max at bottom (label
+        # strip at bottom, opposite the chart above).
+        # tree_location="bottom" → root at bottom → branch_max at top (label
+        # strip at top, opposite the chart below).
+        # Each label's chart-facing edge is anchored at `chart_edge_branch`.
+        # The text mark is rotated 270° (reads bottom-to-top), which maps
+        # pre-rotation `align="right"` to a top anchor (text extends down)
+        # and `align="left"` to a bottom anchor (text extends up). For tree
+        # on the bottom, the chart-facing edge is the panel's top → "right".
+        # For tree on the top, it's the panel's bottom → "left".
+        if tree_location == "top":
+            branch_domain = [chart_edge_branch, branch_min]
+            text_align = "left"
+        else:
+            branch_domain = [branch_min, chart_edge_branch]
+            text_align = "right"
         branch_scale = alt.Scale(domain=branch_domain, nice=False, zero=False)
         # tip-axis domain[1] (at panel right) extends past last tip when
         # scale_bar=True.
@@ -1321,10 +1470,46 @@ def _build_tree_chart(
                     tooltip=alt.Tooltip("name:N", title="strain"),
                 )
             )
+        # Strain text label as halo + visible text (see vertical-layout
+        # comment above).
+        if connect_leader_to_label:
+            label_text_enc = dict(
+                y=alt.Y("x_label:Q", scale=branch_scale, axis=None),
+                x=tip_enc,
+                text="name:N",
+            )
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_text(
+                    align=text_align,
+                    baseline="middle",
+                    angle=270,
+                    fontSize=strain_label_font_size,
+                    fontWeight=strain_label_font_weight,
+                    fill="white",
+                    stroke="white",
+                    strokeWidth=halo_px,
+                    strokeJoin="round",
+                )
+                .encode(**label_text_enc)
+            )
+            layers.append(
+                alt.Chart(tips_df)
+                .mark_text(
+                    align=text_align,
+                    baseline="middle",
+                    angle=270,
+                    fontSize=strain_label_font_size,
+                    fontWeight=strain_label_font_weight,
+                )
+                .encode(**label_text_enc)
+            )
         if scale_bar_layer is not None:
             layers.append(scale_bar_layer)
         layered = alt.layer(*layers)
-        layered = layered.properties(width=extended_strain_dim, height=tree_size)
+        layered = layered.properties(
+            width=extended_strain_dim, height=extended_tree_size
+        )
     else:
         raise ValueError(f"strain_axis must be 'x' or 'y', got {strain_axis!r}")
 
