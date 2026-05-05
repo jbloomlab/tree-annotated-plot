@@ -23,12 +23,20 @@ class TreeNode:
     `y` is set by :func:`layout` and is the integer index of the node's tip
     (for tips) or the midpoint of its descendants' tip indices (for internal
     nodes).
+
+    `node_attrs` and `branch_attrs` carry the raw Auspice JSON dicts unchanged
+    so downstream code (e.g. `_color`) can read them directly. `node_attrs.div`
+    has already been consumed by `_resolve_branch_length`; `node_attrs[X]` is
+    where things like `subclade` live; `branch_attrs.mutations[<gene>]` is
+    where mutation strings like `"N158K"` live.
     """
 
     name: str
     x: float
     children: list["TreeNode"] = field(default_factory=list)
     y: float | None = None
+    node_attrs: dict = field(default_factory=dict)
+    branch_attrs: dict = field(default_factory=dict)
 
     @property
     def is_tip(self) -> bool:
@@ -66,6 +74,29 @@ def load_auspice(
         ``False`` the same case becomes a ``warnings.warn``. A missing
         ``version`` field always warns and proceeds.
     """
+    root, _ = load_auspice_with_meta(
+        source,
+        tree_strain_field=tree_strain_field,
+        branch_length=branch_length,
+        strict_version=strict_version,
+    )
+    return root
+
+
+def load_auspice_with_meta(
+    source: str | Path | dict,
+    *,
+    tree_strain_field: str,
+    branch_length: str = "div",
+    strict_version: bool = True,
+) -> tuple[TreeNode, dict]:
+    """Like :func:`load_auspice`, but also returns the Auspice top-level
+    ``meta`` dict.
+
+    Used by code paths that need ``meta.colorings`` (e.g. resolving the
+    color palette for ``color_tree_by``). Returns ``(root, meta)`` where
+    ``meta`` is ``data.get("meta", {})``.
+    """
     _validate_tree_strain_field(tree_strain_field)
     if branch_length not in ("div", "num_date"):
         raise ValueError(
@@ -85,7 +116,9 @@ def load_auspice(
 
     if "tree" not in data:
         raise ValueError("Auspice JSON must have a top-level 'tree' field")
-    return _parse_node(data["tree"], tree_strain_field, branch_length)
+    root = _parse_node(data["tree"], tree_strain_field, branch_length)
+    meta = data.get("meta", {}) or {}
+    return root, meta
 
 
 def _check_auspice_version(data: dict, *, strict_version: bool) -> None:
@@ -160,7 +193,13 @@ def _parse_node(d: dict, tree_strain_field: str, branch_length: str) -> TreeNode
     children = [
         _parse_node(c, tree_strain_field, branch_length) for c in children_dicts
     ]
-    return TreeNode(name=name, x=float(branch_value), children=children)
+    return TreeNode(
+        name=name,
+        x=float(branch_value),
+        children=children,
+        node_attrs=d.get("node_attrs", {}) or {},
+        branch_attrs=d.get("branch_attrs", {}) or {},
+    )
 
 
 def _resolve_branch_length(node_dict: dict, branch_length: str) -> float:
@@ -225,7 +264,13 @@ def _prune_recursive(node: TreeNode, keep_strains: set[str]) -> TreeNode | None:
     """
     if node.is_tip:
         if node.name in keep_strains:
-            return TreeNode(name=node.name, x=node.x, children=[])
+            return TreeNode(
+                name=node.name,
+                x=node.x,
+                children=[],
+                node_attrs=node.node_attrs,
+                branch_attrs=node.branch_attrs,
+            )
         return None
 
     new_children: list[TreeNode] = []
@@ -239,7 +284,13 @@ def _prune_recursive(node: TreeNode, keep_strains: set[str]) -> TreeNode | None:
     if len(new_children) == 1:
         # Collapse this single-child internal into its child.
         return new_children[0]
-    return TreeNode(name=node.name, x=node.x, children=new_children)
+    return TreeNode(
+        name=node.name,
+        x=node.x,
+        children=new_children,
+        node_attrs=node.node_attrs,
+        branch_attrs=node.branch_attrs,
+    )
 
 
 def tips(root: TreeNode) -> Iterator[TreeNode]:
@@ -278,12 +329,20 @@ def _assign_internal_y(node: TreeNode) -> float:
 def segments(root: TreeNode) -> pd.DataFrame:
     """Build a DataFrame of line segments for drawing the tree.
 
-    Returns columns `x`, `x2`, `y`, `y2`. Each row is one segment:
+    Returns columns `x`, `x2`, `y`, `y2`, `color_node`. Each row is one
+    segment:
 
     - For each internal node, one vertical connector from the topmost to the
-      bottommost child (x == x2 == node.x).
+      bottommost child (x == x2 == node.x). `color_node` is the parent's
+      name — the connector takes the parent's color.
     - For each non-root node, one horizontal branch from its parent's x to its
-      own x at its own y (y == y2).
+      own x at its own y (y == y2). `color_node` is the *child*'s name —
+      the branch into a node is colored by that node, matching how Auspice
+      colors trees.
+
+    `color_node` is the join key into the per-node color map produced by
+    `_color.compute_node_color_values`. When no coloring is requested, the
+    column is harmless (consumers ignore it).
 
     Assumes :func:`layout` has already been called on `root`.
     """
@@ -297,11 +356,25 @@ def segments(root: TreeNode) -> pd.DataFrame:
             return
         child_ys = [c.y for c in node.children]
         rows.append(
-            {"x": node.x, "x2": node.x, "y": min(child_ys), "y2": max(child_ys)}
+            {
+                "x": node.x,
+                "x2": node.x,
+                "y": min(child_ys),
+                "y2": max(child_ys),
+                "color_node": node.name,
+            }
         )
         for c in node.children:
-            rows.append({"x": node.x, "x2": c.x, "y": c.y, "y2": c.y})
+            rows.append(
+                {
+                    "x": node.x,
+                    "x2": c.x,
+                    "y": c.y,
+                    "y2": c.y,
+                    "color_node": c.name,
+                }
+            )
             walk(c)
 
     walk(root)
-    return pd.DataFrame(rows, columns=["x", "x2", "y", "y2"])
+    return pd.DataFrame(rows, columns=["x", "x2", "y", "y2", "color_node"])

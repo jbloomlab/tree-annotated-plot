@@ -103,6 +103,11 @@ chart-builder wrote them (fonts, ticks, axis title, and all), and the
 tree's dashed leader lines stop at the tree panel's chart-facing
 edge.
 
+The H3N2 example above is rendered with `color_tree_by="subclade"`,
+which colors the tree's branches and tip circles by the
+`node_attrs.subclade` value at each node and adds a categorical legend
+below the plot. See "Color the tree" below for the full set of options.
+
 ### Optional: connect leaders all the way to the labels
 
 If you'd prefer the dashed leaders to run flush into the strain
@@ -131,6 +136,40 @@ CLI flags: `--connect-leader-to-label --strain-label-font-size 9
 --shift-tree-loc 60`. In Python:
 `connect_leader_to_label=True, strain_label_font_size=9, shift_tree_loc=60`.
 
+### Color the tree
+
+Pass `color_tree_by` to color the tree's branches and tip circles by
+any property the Auspice JSON exposes — broadly, anything that
+appears in the "Color By" dropdown on the Nextstrain view of the same
+tree. Two forms are supported:
+
+- A named attribute, e.g. `color_tree_by="subclade"` (used in the
+  example above). Common alternatives include `"clade_membership"`,
+  `"region"`, `"country"` — whichever the tree provides.
+- A genotype at one or more sites in a gene. For a single site,
+  `color_tree_by="genotype:HA1:158"` colors each tip by the amino
+  acid at HA1 site 158. A comma-separated list gives a haplotype:
+  `"genotype:HA1:158,189"`. Sites that don't vary in the tree are
+  dropped from the haplotype label.
+
+Colors match what you'd see on the Nextstrain view of the same tree —
+either from the JSON's palette information when the build provides it,
+or from the same default palette Auspice uses when it doesn't.
+Categories are ordered by descending frequency in both cases. Missing
+values render in gray, and the legend is drawn at the bottom of the
+combined plot.
+
+The example below colors the same H3N2 chart by genotype at HA1
+site 158, which has two mutations in the tree (`N158K`, `N158D`) and
+so renders three states (N, K, D):
+
+![H3N2 combined chart, colored by genotype HA1:158](images/h3n2_combined_genotype_158.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_combined_genotype_158.html){target="_blank"}
+
+CLI flag: `--color-tree-by genotype:HA1:158`. In Python:
+`color_tree_by="genotype:HA1:158"`.
+
 ### Reproduce — command line
 
 ```bash
@@ -145,6 +184,7 @@ tree-annotated-plot \
     --tree-size 140 \
     --scale-bar \
     --branch-length-units substitutions \
+    --color-tree-by subclade \
     --output examples/data/h3n2_combined.json
 ```
 
@@ -162,6 +202,7 @@ out = tree_annotated_plot.plot(
     tree_size=140,
     scale_bar=True,
     branch_length_units="substitutions",
+    color_tree_by="subclade",
 )
 ```
 

@@ -14,7 +14,7 @@ from typing import Any, Literal
 import altair as alt
 import pandas as pd
 
-from . import _config, _tree
+from . import _color, _config, _tree
 from ._config import PlotConfig, TreeLocation
 
 # Accepted chart input forms for the public `plot` function.
@@ -35,8 +35,8 @@ def plot(
     branch_length: Literal["div", "num_date"],
     tree_size: int = 100,
     tree_location: TreeLocation | None = None,
-    tree_line_width: float = 1.5,
-    tree_node_size: float = 28,
+    tree_line_width: float = 2.0,
+    tree_node_size: float = 45,
     leader_line_width: float = 1.0,
     scale_bar: bool = False,
     branch_length_units: str | None = None,
@@ -46,6 +46,7 @@ def plot(
     strain_label_font_size: float = 10.0,
     strain_label_font_weight: Literal["normal", "bold"] = "normal",
     shift_tree_loc: int = 0,
+    color_tree_by: str | None = None,
 ) -> alt.HConcatChart | alt.VConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`."""
     return _build(
@@ -68,6 +69,7 @@ def plot(
             strain_label_font_size=strain_label_font_size,
             strain_label_font_weight=strain_label_font_weight,
             shift_tree_loc=shift_tree_loc,
+            color_tree_by=color_tree_by,
         ),
     )
 
@@ -121,7 +123,7 @@ def _build(
     set on a config object); `config` carries every styling / behavior
     knob. Both surfaces converge here so they can never disagree.
     """
-    root = _ensure_tree(
+    root, auspice_meta = _ensure_tree(
         tree,
         config.tree_strain_field,
         branch_length=config.branch_length,
@@ -162,6 +164,12 @@ def _build(
     strain_dim = _coerce_dim(
         _chart_strain_dim(spec, axis_hits, axis), n_tips=len(tip_names)
     )
+    if config.color_tree_by is not None:
+        color_mapping = _color.compute_node_color_values(
+            root, config.color_tree_by, auspice_meta=auspice_meta
+        )
+    else:
+        color_mapping = None
     tree_chart = _build_tree_chart(
         root,
         n_tips=len(tip_names),
@@ -180,6 +188,7 @@ def _build(
         strain_label_font_weight=config.strain_label_font_weight,
         shift_tree_loc=config.shift_tree_loc,
         tip_names=tip_names,
+        color_mapping=color_mapping,
     )
 
     new_chart = _apply_tree_order_to_chart_object(
@@ -256,10 +265,17 @@ def _ensure_tree(
     *,
     branch_length: str,
     strict_version: bool,
-) -> _tree.TreeNode:
+) -> tuple[_tree.TreeNode, dict | None]:
+    """Return ``(root, auspice_meta)``.
+
+    ``auspice_meta`` is the loaded Auspice JSON's top-level ``meta`` dict, or
+    ``None`` when the caller passed a pre-built ``TreeNode`` (in which case
+    we have no JSON to read ``meta.colorings`` from, and color resolution
+    falls back to the default palette).
+    """
     if isinstance(tree, _tree.TreeNode):
-        return tree
-    return _tree.load_auspice(
+        return tree, None
+    return _tree.load_auspice_with_meta(
         tree,
         tree_strain_field=tree_strain_field,
         branch_length=branch_length,
@@ -1200,8 +1216,8 @@ def _build_tree_chart(
     strain_dim: int | float | alt.Step,
     strain_axis: str,
     tree_location: TreeLocation,
-    tree_line_width: float = 1.5,
-    tree_node_size: float = 28,
+    tree_line_width: float = 2.0,
+    tree_node_size: float = 45,
     leader_line_width: float = 1.0,
     scale_bar: bool = False,
     branch_length: str = "div",
@@ -1211,6 +1227,7 @@ def _build_tree_chart(
     strain_label_font_weight: str = "normal",
     shift_tree_loc: int = 0,
     tip_names: list[str] | None = None,
+    color_mapping: _color.ColorMapping | None = None,
 ) -> alt.Chart:
     """Build the tree panel.
 
@@ -1247,6 +1264,37 @@ def _build_tree_chart(
     )
     branch_max = float(seg_df[["x", "x2"]].max().max())
     branch_min = float(seg_df[["x", "x2"]].min().min())
+
+    # When color_tree_by is set, attach the per-node color category to both
+    # frames. The `mark_rule` for branches (one row per `seg_df` segment) and
+    # the `mark_circle` for tips share the same color encoding so Altair
+    # collapses them into a single legend at the bottom.
+    if color_mapping is not None:
+        seg_df = seg_df.assign(
+            color_value=seg_df["color_node"].map(color_mapping.values_by_node)
+        )
+        tips_df = tips_df.assign(
+            color_value=tips_df["name"].map(color_mapping.values_by_node)
+        )
+        legend_kwargs: dict = {
+            "title": color_mapping.legend_title,
+            "orient": "bottom",
+        }
+        if color_mapping.legend_values is not None:
+            # Restrict the legend display without touching the scale, so
+            # internal-node segments still render gray when "unknown" is on
+            # the tree but no tip is.
+            legend_kwargs["values"] = list(color_mapping.legend_values)
+        color_enc = alt.Color(
+            "color_value:N",
+            scale=alt.Scale(
+                domain=list(color_mapping.domain),
+                range=list(color_mapping.range_),
+            ),
+            legend=alt.Legend(**legend_kwargs),
+        )
+    else:
+        color_enc = None
 
     # When connect_leader_to_label is on:
     #   - All leaders extend to a single point: the panel's chart-facing edge
@@ -1363,20 +1411,34 @@ def _build_tree_chart(
                 )
                 .encode(x=branch_enc, x2="x2:Q", y=tip_enc)
             )
+        seg_enc_kwargs: dict = {
+            "x": branch_enc,
+            "x2": "x2:Q",
+            "y": tip_enc,
+            "y2": "y2:Q",
+        }
+        if color_enc is not None:
+            seg_enc_kwargs["color"] = color_enc
         layers.append(
             alt.Chart(seg_df)
-            .mark_rule(strokeWidth=tree_line_width)
-            .encode(x=branch_enc, x2="x2:Q", y=tip_enc, y2="y2:Q")
+            .mark_rule(strokeWidth=tree_line_width, opacity=1.0)
+            .encode(**seg_enc_kwargs)
         )
         if tree_node_size > 0:
+            tip_enc_kwargs: dict = {
+                "x": branch_enc,
+                "y": tip_enc,
+                "tooltip": alt.Tooltip("name:N", title="strain"),
+            }
+            tip_mark_kwargs: dict = {"size": tree_node_size, "opacity": 1.0}
+            if color_enc is None:
+                tip_mark_kwargs["color"] = "black"
+            else:
+                tip_enc_kwargs["color"] = color_enc
             layers.append(
                 alt.Chart(tips_df)
-                .mark_circle(size=tree_node_size, color="black")
-                .encode(
-                    x=branch_enc,
-                    y=tip_enc,
-                    tooltip=alt.Tooltip("name:N", title="strain"),
-                )
+                .mark_circle(**tip_mark_kwargs)
+                .encode(**tip_enc_kwargs)
             )
         # Strain text label, drawn as two stacked layers: a white halo
         # (white fill + thick white stroke) under the visible text. The
@@ -1455,20 +1517,34 @@ def _build_tree_chart(
                 )
                 .encode(y=branch_enc, y2="x2:Q", x=tip_enc)
             )
+        seg_enc_kwargs = {
+            "y": branch_enc,
+            "y2": "x2:Q",
+            "x": tip_enc,
+            "x2": "y2:Q",
+        }
+        if color_enc is not None:
+            seg_enc_kwargs["color"] = color_enc
         layers.append(
             alt.Chart(seg_df)
-            .mark_rule(strokeWidth=tree_line_width)
-            .encode(y=branch_enc, y2="x2:Q", x=tip_enc, x2="y2:Q")
+            .mark_rule(strokeWidth=tree_line_width, opacity=1.0)
+            .encode(**seg_enc_kwargs)
         )
         if tree_node_size > 0:
+            tip_enc_kwargs = {
+                "y": branch_enc,
+                "x": tip_enc,
+                "tooltip": alt.Tooltip("name:N", title="strain"),
+            }
+            tip_mark_kwargs = {"size": tree_node_size, "opacity": 1.0}
+            if color_enc is None:
+                tip_mark_kwargs["color"] = "black"
+            else:
+                tip_enc_kwargs["color"] = color_enc
             layers.append(
                 alt.Chart(tips_df)
-                .mark_circle(size=tree_node_size, color="black")
-                .encode(
-                    y=branch_enc,
-                    x=tip_enc,
-                    tooltip=alt.Tooltip("name:N", title="strain"),
-                )
+                .mark_circle(**tip_mark_kwargs)
+                .encode(**tip_enc_kwargs)
             )
         # Strain text label as halo + visible text (see vertical-layout
         # comment above).

@@ -110,15 +110,23 @@ def _render_kikawa() -> None:
         # Render the bare chart (no tree) so the docs page can show what
         # the chart looks like before tree-annotated-plot wraps it.
         _save_pair(chart, f"{basename}_chart_only")
-        out = tree_annotated_plot.plot(
-            DATA_DIR / f"flu-seqneut-2025to2026_{subtype}.json",
-            chart,
+        plot_kwargs = dict(
             chart_strain_field="axis_label",
             tree_strain_field="derived_haplotype",
             branch_length="div",
             tree_size=140,
             scale_bar=True,
             branch_length_units="substitutions",
+        )
+        if subtype == "H3N2":
+            # Color H3N2 by subclade so the docs SVG matches what users see
+            # on Nextstrain. The Auspice JSON's meta.colorings.subclade has
+            # no `scale` defined, so colors come from the default palette.
+            plot_kwargs["color_tree_by"] = "subclade"
+        out = tree_annotated_plot.plot(
+            DATA_DIR / f"flu-seqneut-2025to2026_{subtype}.json",
+            chart,
+            **plot_kwargs,
         )
         _save_pair(out, f"{basename}_combined")
 
@@ -146,8 +154,34 @@ def _render_kikawa() -> None:
         connect_leader_to_label=True,
         strain_label_font_size=9,
         shift_tree_loc=60,
+        color_tree_by="subclade",
     )
     _save_pair(out, "h3n2_combined_label_connect")
+
+    # H3N2 once more, colored by genotype at HA1 site 158: same chart and
+    # default layout as `h3n2_combined`, with `color_tree_by` switched to
+    # the genotype form. Site 158 has two mutations (N158K, N158D) in the
+    # tree, so this renders three states (N, K, D).
+    h3n2_chart_genotype = builder.make_chart(
+        subtype="H3N2",
+        chart_type="iqr",
+        titers=titers,
+        viruses=viruses,
+        metadata=metadata,
+        all_cohorts=all_cohorts,
+    )
+    out = tree_annotated_plot.plot(
+        DATA_DIR / "flu-seqneut-2025to2026_H3N2.json",
+        h3n2_chart_genotype,
+        chart_strain_field="axis_label",
+        tree_strain_field="derived_haplotype",
+        branch_length="div",
+        tree_size=140,
+        scale_bar=True,
+        branch_length_units="substitutions",
+        color_tree_by="genotype:HA1:158",
+    )
+    _save_pair(out, "h3n2_combined_genotype_158")
 
 
 def main() -> None:
