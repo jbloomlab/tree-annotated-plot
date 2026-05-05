@@ -59,10 +59,15 @@ def _horizontal_chart() -> alt.Chart:
 
 
 def _kw():
+    # `connect_leader_to_label=False` keeps the tree panel's branch-axis
+    # dimension equal to `tree_size` (no label strip), which the
+    # panel-width/height assertions below pin exactly. The label-connection
+    # behavior has its own coverage in tests/test_label_connection.py.
     return dict(
         chart_strain_field="strain",
         tree_strain_field="name",
         branch_length="div",
+        connect_leader_to_label=False,
     )
 
 
