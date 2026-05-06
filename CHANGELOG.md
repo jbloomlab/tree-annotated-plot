@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-05-06
+
+### Fixed
+
+- Apply tree-tip ordering to chart axes that use untyped Altair
+  shorthand (`alt.Y("strain")` without a `:N` / `:O` type suffix).
+  Previously the sort override was silently skipped, so the chart
+  rendered in data order instead of tree order.
+- An internal consistency check now raises if the spec-level walk
+  and the live-object walk over the user's chart ever disagree on
+  the number of strain-axis encodings, so silent skips like the
+  one above can't recur in another shape.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added
