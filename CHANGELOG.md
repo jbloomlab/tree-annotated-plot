@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- When `color_tree_by` is used together with a user chart that has its
+  own `color` encoding (e.g. a titer plot colored by `cell_line`), the
+  user chart's marks no longer disappear. The concat container now
+  resolves the `color` scale as `independent` so the tree's
+  `color_value:N` scale (with its tree-specific domain) is not merged
+  with the user chart's color scale.
+
 ## [0.2.1] - 2026-05-06
 
 ### Fixed

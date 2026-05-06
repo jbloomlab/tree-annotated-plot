@@ -276,22 +276,32 @@ def _concat_for_location(
     user_chart: alt.TopLevelMixin,
     location: TreeLocation,
 ) -> alt.HConcatChart | alt.VConcatChart:
-    """Concat tree and chart in the order implied by the tree's location."""
+    """Concat tree and chart in the order implied by the tree's location.
+
+    The strain axis is resolved independent so the tree and chart can use
+    different scales on that axis (the tree's branch length vs. the chart's
+    measurement value), while still sharing the orthogonal strain axis. The
+    `color` scale is also resolved independent: when ``color_tree_by`` is set
+    the tree panel emits a `color_value:N` color scale with a tree-specific
+    domain, and Vega-Lite's default of sharing color across concat views
+    would merge it with any color encoding on the user's chart, hiding
+    user-chart marks whose color values aren't in the tree's domain.
+    """
     if location == "left":
         return alt.hconcat(tree_chart, user_chart, spacing=0).resolve_scale(
-            y="independent"
+            y="independent", color="independent"
         )
     if location == "right":
         return alt.hconcat(user_chart, tree_chart, spacing=0).resolve_scale(
-            y="independent"
+            y="independent", color="independent"
         )
     if location == "top":
         return alt.vconcat(tree_chart, user_chart, spacing=0).resolve_scale(
-            x="independent"
+            x="independent", color="independent"
         )
     if location == "bottom":
         return alt.vconcat(user_chart, tree_chart, spacing=0).resolve_scale(
-            x="independent"
+            x="independent", color="independent"
         )
     raise ValueError(f"unreachable: tree_location={location!r}")
 
