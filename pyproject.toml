@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tree-annotated-plot"
-version = "0.2.0"
+version = "0.2.1"
 description = "Annotate the axis of an Altair / Vega-Lite plot with a phylogenetic tree."
 readme = "README.md"
 requires-python = ">=3.13"

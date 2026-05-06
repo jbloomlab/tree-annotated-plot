@@ -110,6 +110,73 @@ def test_plot_overrides_y_sort_to_tree_tip_order():
     assert user_panel_spec["encoding"]["y"]["sort"] == ["A", "B", "C", "D"]
 
 
+def test_plot_overrides_sort_for_untyped_shorthand_y():
+    """Regression: `alt.Y('strain')` (no `:N` suffix) used to silently
+    skip the sort override because `_channel_field` called `to_dict()`
+    on the bare channel, which raises without a chart-data context."""
+    chart = (
+        alt.Chart(_synthetic_df())
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("titer:Q", scale=alt.Scale(type="log")),
+            y=alt.Y("strain"),
+            color="serum:N",
+        )
+        .properties(width=300, height=200)
+    )
+    out = tree_annotated_plot.plot(
+        _synthetic_auspice(),
+        chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
+    user_panel_spec = out.hconcat[1].to_dict()
+    assert user_panel_spec["encoding"]["y"]["sort"] == ["A", "B", "C", "D"]
+
+
+def test_plot_overrides_sort_for_untyped_shorthand_x():
+    """Same regression on the horizontal layout."""
+    chart = (
+        alt.Chart(_synthetic_df())
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("strain"),
+            y=alt.Y("titer:Q", scale=alt.Scale(type="log")),
+            color="serum:N",
+        )
+        .properties(width=200, height=300)
+    )
+    out = tree_annotated_plot.plot(
+        _synthetic_auspice(),
+        chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
+    # tree_location defaults to "bottom" for x-axis strain → vconcat(user, tree)
+    user_panel_spec = out.vconcat[0].to_dict()
+    assert user_panel_spec["encoding"]["x"]["sort"] == ["A", "B", "C", "D"]
+
+
+def test_plot_consistency_tripwire_fires_when_live_walker_misses(monkeypatch):
+    """If `_channel_field` ever reverts to silently failing, the spec walker
+    finds a strain encoding the live walker doesn't, and the count-based
+    consistency check raises rather than letting a wrong-ordered chart
+    render."""
+    from tree_annotated_plot import _plot
+
+    monkeypatch.setattr(_plot, "_channel_field", lambda ch: None)
+    with pytest.raises(RuntimeError, match="internal consistency check failed"):
+        tree_annotated_plot.plot(
+            _synthetic_auspice(),
+            _synthetic_chart(),
+            chart_strain_field="strain",
+            tree_strain_field="name",
+            branch_length="div",
+        )
+
+
 def test_plot_strain_mismatch_raises():
     bad = _synthetic_chart()
     bad.data = bad.data.replace({"strain": {"D": "X"}})

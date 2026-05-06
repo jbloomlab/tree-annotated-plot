@@ -15,7 +15,7 @@ import altair as alt
 import pandas as pd
 import pytest
 
-from tree_annotated_plot._plot import _find_strain_encoding
+from tree_annotated_plot._plot import _channel_field, _find_strain_encoding
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "examples" / "data"
 
@@ -139,3 +139,70 @@ def test_find_strain_encoding_quantitative_type_raises() -> None:
     spec = _flat_chart_spec(typ="quantitative")
     with pytest.raises(ValueError, match="type='quantitative'"):
         _find_strain_encoding(spec, "strain")
+
+
+# ---------- _channel_field: covers the "untyped shorthand" silent-skip bug.
+
+
+def test_channel_field_typed_shorthand() -> None:
+    """`alt.Y('strain:N')` — the form every existing test uses."""
+    ch = alt.Y("strain:N")
+    assert _channel_field(ch) == "strain"
+
+
+def test_channel_field_untyped_shorthand() -> None:
+    """`alt.Y('strain')` without a type — the form that triggered the
+    original silent-skip bug. `to_dict()` on this channel raises because
+    type inference needs the chart's data, but we can still recover the
+    field from `_kwds['shorthand']`."""
+    ch = alt.Y("strain")
+    assert _channel_field(ch) == "strain"
+
+
+def test_channel_field_explicit_field_kwarg() -> None:
+    """`alt.Y(field='strain', type='nominal')` — the explicit form."""
+    ch = alt.Y(field="strain", type="nominal")
+    assert _channel_field(ch) == "strain"
+
+
+def test_channel_field_after_from_dict_roundtrip() -> None:
+    """After `alt.Chart.from_dict(...)` (used by the CLI / JSON / HTML
+    chart loaders), the field is stored as a `FieldName(SchemaBase)`
+    wrapper, not a plain `str`. The helper must unwrap it."""
+    df = pd.DataFrame({"strain": ["A", "B"], "titer": [1.0, 2.0]})
+    chart = alt.Chart(df).mark_circle().encode(x="titer:Q", y=alt.Y("strain:N"))
+    roundtripped = alt.Chart.from_dict(chart.to_dict())
+    assert _channel_field(roundtripped.encoding.y) == "strain"
+
+
+def test_channel_field_aggregate_shorthand() -> None:
+    """`alt.X('mean(titer):Q')` aggregate-wrapped shorthand."""
+    ch = alt.X("mean(titer):Q")
+    assert _channel_field(ch) == "titer"
+
+
+def test_channel_field_value_only_returns_none() -> None:
+    """A `value=` constant encoding has no field — legitimate None,
+    not an error."""
+    ch = alt.Y(value=5)
+    assert _channel_field(ch) is None
+
+
+def test_channel_field_unbalanced_aggregate_raises() -> None:
+    """A shorthand string we can't parse must raise rather than silently
+    return None — silent fallthrough is what hid the original bug."""
+    ch = alt.Y("strain")
+    ch._kwds["shorthand"] = "mean(titer:Q"
+    with pytest.raises(ValueError, match="unbalanced aggregate"):
+        _channel_field(ch)
+
+
+def test_channel_field_non_kwds_object_raises() -> None:
+    """A non-altair object accidentally passed in must raise, not return
+    None — same fail-fast principle."""
+
+    class NotAChannel:
+        pass
+
+    with pytest.raises(ValueError, match="no `_kwds` mapping"):
+        _channel_field(NotAChannel())
