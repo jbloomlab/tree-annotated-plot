@@ -17,6 +17,19 @@ import pandas as pd
 from . import _color, _config, _tree
 from ._config import PlotConfig, TreeLocation
 
+# Vega-Lite `orient` values that anchor the legend to the chart's left or
+# right edge — these are the ones whose natural layout is one entry per row.
+# (The Vega-Lite schema's other corner orients, `top-left`/`top-right`/
+# `bottom-left`/`bottom-right`, all anchor to the top or bottom edge, so
+# they're horizontal-direction by default and don't need the smart default.)
+# If a chart's config-level `legend.columns` default is set (a common
+# pattern in altair theme/config setups), Vega-Lite will pack entries into
+# multiple columns even with a left/right orient. We force columns=1 in
+# that case so the user's choice of `orient: "left"` or `"right"` produces
+# vertical stacking without requiring them to know about the `columns`
+# interaction.
+_VERTICAL_ORIENTS = frozenset({"left", "right"})
+
 # Accepted chart input forms for the public `plot` function.
 ChartInput = alt.TopLevelMixin | str | Path | dict
 
@@ -47,6 +60,10 @@ def plot(
     strain_label_font_weight: Literal["normal", "bold"] = "normal",
     shift_tree_loc: int = 0,
     color_tree_by: str | None = None,
+    tree_color_scale: dict[str, str] | None = None,
+    tree_color_legend_format: dict[str, Any] | None = None,
+    tree_color_legend_show: bool = True,
+    scale_bar_font_size: float = 10.0,
 ) -> alt.HConcatChart | alt.VConcatChart:
     """Return an Altair chart with a phylogenetic tree drawn alongside `chart`."""
     return _build(
@@ -70,6 +87,10 @@ def plot(
             strain_label_font_weight=strain_label_font_weight,
             shift_tree_loc=shift_tree_loc,
             color_tree_by=color_tree_by,
+            tree_color_scale=tree_color_scale,
+            tree_color_legend_format=tree_color_legend_format,
+            tree_color_legend_show=tree_color_legend_show,
+            scale_bar_font_size=scale_bar_font_size,
         ),
     )
 
@@ -166,9 +187,17 @@ def _build(
     )
     if config.color_tree_by is not None:
         color_mapping = _color.compute_node_color_values(
-            root, config.color_tree_by, auspice_meta=auspice_meta
+            root,
+            config.color_tree_by,
+            auspice_meta=auspice_meta,
+            tree_color_scale=config.tree_color_scale,
         )
     else:
+        if config.tree_color_scale is not None:
+            raise ValueError(
+                "tree_color_scale was supplied but color_tree_by is None; "
+                "the override only applies when the tree is being colored."
+            )
         color_mapping = None
     tree_chart = _build_tree_chart(
         root,
@@ -181,6 +210,7 @@ def _build(
         tree_node_size=config.tree_node_size,
         leader_line_width=config.leader_line_width,
         scale_bar=config.scale_bar,
+        scale_bar_font_size=config.scale_bar_font_size,
         branch_length=config.branch_length,
         branch_length_units=config.branch_length_units,
         connect_leader_to_label=config.connect_leader_to_label,
@@ -189,6 +219,8 @@ def _build(
         shift_tree_loc=config.shift_tree_loc,
         tip_names=tip_names,
         color_mapping=color_mapping,
+        legend_format=config.tree_color_legend_format,
+        legend_show=config.tree_color_legend_show,
     )
 
     new_chart = _apply_tree_order_to_chart_object(
@@ -1141,6 +1173,7 @@ def _build_scale_bar_layer(
     extra_units: float,
     strain_axis: str,
     label: str,
+    font_size: float = 10.0,
 ) -> alt.LayerChart:
     """Build a 2-layer (bar rule + text) chart for the scale bar.
 
@@ -1182,7 +1215,7 @@ def _build_scale_bar_layer(
         )
         text = (
             alt.Chart(text_df)
-            .mark_text(fontSize=10, align="center", baseline="top")
+            .mark_text(fontSize=font_size, align="center", baseline="top")
             .encode(x="x:Q", y="y:Q", text="label:N")
         )
     else:
@@ -1196,7 +1229,7 @@ def _build_scale_bar_layer(
         )
         text = (
             alt.Chart(text_df)
-            .mark_text(fontSize=10, align="center", baseline="middle", angle=270)
+            .mark_text(fontSize=font_size, align="center", baseline="middle", angle=270)
             .encode(y="x:Q", x="y:Q", text="label:N")
         )
     return bar + text
@@ -1220,6 +1253,7 @@ def _build_tree_chart(
     tree_node_size: float = 45,
     leader_line_width: float = 1.0,
     scale_bar: bool = False,
+    scale_bar_font_size: float = 10.0,
     branch_length: str = "div",
     branch_length_units: str | None = None,
     connect_leader_to_label: bool = False,
@@ -1228,6 +1262,8 @@ def _build_tree_chart(
     shift_tree_loc: int = 0,
     tip_names: list[str] | None = None,
     color_mapping: _color.ColorMapping | None = None,
+    legend_format: dict[str, Any] | None = None,
+    legend_show: bool = True,
 ) -> alt.Chart:
     """Build the tree panel.
 
@@ -1276,22 +1312,44 @@ def _build_tree_chart(
         tips_df = tips_df.assign(
             color_value=tips_df["name"].map(color_mapping.values_by_node)
         )
+        # Defaults the user can override by passing the same key in
+        # `legend_format`. Title comes from the color mapping's derived
+        # title (e.g. "subclade" or "HA1 site 158"); orient defaults to
+        # bottom to match the docs.
         legend_kwargs: dict = {
             "title": color_mapping.legend_title,
             "orient": "bottom",
         }
+        if legend_format is not None:
+            legend_kwargs.update(legend_format)
         if color_mapping.legend_values is not None:
             # Restrict the legend display without touching the scale, so
             # internal-node segments still render gray when "unknown" is on
             # the tree but no tip is.
             legend_kwargs["values"] = list(color_mapping.legend_values)
+        # Smart default for vertical stacking: when the (final) orient
+        # places the legend on the chart's left or right edge and the user
+        # has not explicitly set `columns` or `direction`, force columns=1.
+        # This counteracts a chart-level config default of `legend.columns`
+        # > 1 (some altair theme presets set this), which would otherwise
+        # pack a side-anchored legend into multiple columns.
+        if (
+            legend_kwargs.get("orient") in _VERTICAL_ORIENTS
+            and "columns" not in legend_kwargs
+            and "direction" not in legend_kwargs
+        ):
+            legend_kwargs["columns"] = 1
+        if not legend_show:
+            legend_arg: alt.Legend | None = None
+        else:
+            legend_arg = alt.Legend(**legend_kwargs)
         color_enc = alt.Color(
             "color_value:N",
             scale=alt.Scale(
                 domain=list(color_mapping.domain),
                 range=list(color_mapping.range_),
             ),
-            legend=alt.Legend(**legend_kwargs),
+            legend=legend_arg,
         )
     else:
         color_enc = None
@@ -1372,6 +1430,7 @@ def _build_tree_chart(
             extra_units=extra_units,
             strain_axis=strain_axis,
             label=bar_label,
+            font_size=scale_bar_font_size,
         )
     else:
         extra_units = 0.0

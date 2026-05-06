@@ -18,7 +18,7 @@ from __future__ import annotations
 import dataclasses
 import textwrap
 import typing
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 TreeLocation = Literal["left", "right", "top", "bottom"]
 
@@ -164,6 +164,49 @@ class PlotConfig:
         "is drawn below the plot; missing values are gray. None (default) "
         "leaves the tree black.",
     ] = None
+
+    tree_color_scale: Annotated[
+        dict[str, str] | None,
+        "Hardcoded color scale that overrides the default coloring. Keys "
+        "are category labels, values are colors (any Vega-Lite-compatible "
+        "string — e.g. hex codes). The legend order follows the order keys "
+        "appear here. The keys must match the tree's categories one-to-one "
+        '(extra or missing keys are an error). "unknown" is always gray '
+        "and must not be specified. For genotype/haplotype colorings, the "
+        'category strings include the site number (e.g. "K158" or '
+        '"K158/E189"); a mismatch error lists the actual tree categories. '
+        'CLI form: "value1=#hex1,value2=#hex2,...".',
+    ] = None
+
+    tree_color_legend_format: Annotated[
+        dict[str, Any] | None,
+        "Vega-Lite Legend properties to apply to the tree-coloring legend. "
+        "Pass any subset of the keys at "
+        "https://vega.github.io/vega-lite/docs/legend.html#properties as a "
+        "Python dict (e.g. "
+        '`{"orient": "left", "labelFontSize": 13, "titleFontSize": 13}`). '
+        'Common keys: "orient" (default "bottom"), "direction", "columns", '
+        '"padding", "offset", "labelFontSize", "titleFontSize". Smart '
+        'default: when "orient" is "left" or "right" and you have not set '
+        '"columns" or "direction", "columns" is forced to 1 so entries '
+        "stack vertically. "
+        "None (default) leaves Vega-Lite's defaults. Has no effect when "
+        "`color_tree_by` is None. CLI form: a JSON object string (quote the "
+        'whole argument), e.g. \'{"orient":"left","labelFontSize":13}\'.',
+    ] = None
+
+    tree_color_legend_show: Annotated[
+        bool,
+        "Whether to render the tree-coloring legend. On (default) shows it. "
+        "Off hides the legend entirely while keeping the tree colored. Has "
+        "no effect when `color_tree_by` is None.",
+    ] = True
+
+    scale_bar_font_size: Annotated[
+        float,
+        "Font size (px) for the tree's scale bar label. Default 10. Has no "
+        "effect when `scale_bar` is off.",
+    ] = 10.0
 
 
 # Sidecar for Python-docstring-only prose, keyed by PlotConfig field name.
