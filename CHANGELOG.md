@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (e.g. `"genotype:HA1:158"` or `"genotype:HA1:158,189"`). Colors,
   category ordering, and the bottom-of-plot legend match the
   Nextstrain view of the same tree.
+- `tree_color_scale` (default `None`): override the default coloring
+  with an explicit `{category: color}` mapping. Keys must match the
+  tree's categories one-to-one and the legend order follows the
+  user's key order. CLI form: `"value1=#hex1,value2=#hex2,..."`.
+- `tree_color_legend_format` (default `None`): pass any subset of
+  Vega-Lite's
+  [Legend properties](https://vega.github.io/vega-lite/docs/legend.html#properties)
+  as a dict to style the tree's color legend (`orient`, `direction`,
+  `columns`, `padding`, `labelFontSize`, `titleFontSize`, …). When
+  `orient` is `"left"` or `"right"` and the user has not set
+  `columns` or `direction`, `columns=1` is forced so entries stack
+  vertically. CLI form: a JSON object string.
+- `tree_color_legend_show` (default `True`): set to `False` to hide
+  the tree's color legend entirely while still coloring the tree.
+- `scale_bar_font_size` (default `10`): font size for the tree's
+  scale bar label.
 
 ### Changed
 

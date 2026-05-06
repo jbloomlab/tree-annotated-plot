@@ -119,6 +119,7 @@ def compute_node_color_values(
     root: TreeNode,
     color_spec: str,
     auspice_meta: dict | None = None,
+    tree_color_scale: dict[str, str] | None = None,
 ) -> ColorMapping:
     """Walk the tree and resolve per-node color categories + scale arrays.
 
@@ -135,6 +136,11 @@ def compute_node_color_values(
         is available (caller passed a pre-built `TreeNode`). Used only to
         consult ``meta.colorings[<key>].scale`` and ``.title`` for node-attr
         specs; ignored for genotype specs.
+    tree_color_scale
+        Optional user-supplied {category: color} mapping. When provided, its
+        keys must match the tree's real categories one-to-one (mismatch is a
+        ``ValueError``); the legend order is the dict's insertion order.
+        ``"unknown"`` is always gray and must not be specified.
 
     Returns
     -------
@@ -154,7 +160,10 @@ def compute_node_color_values(
         values_by_node = _color_by_genotype(root, gene, sites)
 
     categories = _ordered_categories(values_by_node.values())
-    domain, range_ = _resolve_scale(categories, parsed, auspice_meta)
+    if tree_color_scale is not None:
+        domain, range_ = _apply_user_scale(categories, tree_color_scale)
+    else:
+        domain, range_ = _resolve_scale(categories, parsed, auspice_meta)
     legend_title = _resolve_legend_title(color_spec, parsed, auspice_meta)
     legend_values = _resolve_legend_values(domain, values_by_node, root)
     return ColorMapping(
@@ -164,6 +173,54 @@ def compute_node_color_values(
         legend_title=legend_title,
         legend_values=legend_values,
     )
+
+
+def _apply_user_scale(
+    categories: list[str],
+    user_scale: dict[str, str],
+) -> tuple[list[str], list[str]]:
+    """Build (domain, range_) from a user-supplied {category: color} dict.
+
+    The user's key order is the legend order (Python dicts preserve insertion
+    order). Keys must match the tree's real categories one-to-one — extras or
+    misses raise ``ValueError`` listing the actual tree categories so the
+    user can copy-paste the correct keys (especially relevant for
+    genotype/haplotype categories like ``"K158"`` or ``"K158/E189"`` whose
+    exact form depends on the data). ``"unknown"`` is always gray and is
+    appended automatically when present in ``categories`` — the user must
+    not include it.
+    """
+    real_categories = [c for c in categories if c != _UNKNOWN]
+    user_keys = list(user_scale.keys())
+
+    if _UNKNOWN in user_keys:
+        raise ValueError(
+            f"tree_color_scale must not contain key {_UNKNOWN!r}; "
+            "missing values are always rendered gray."
+        )
+
+    tree_set = set(real_categories)
+    user_set = set(user_keys)
+    missing = sorted(tree_set - user_set)
+    extra = sorted(user_set - tree_set)
+    if missing or extra:
+        msg = (
+            "tree_color_scale keys don't match the tree's categories.\n"
+            f"  Tree categories: {real_categories!r}\n"
+            f"  Provided keys:   {user_keys!r}"
+        )
+        if missing:
+            msg += f"\n  Missing from your scale: {missing!r}"
+        if extra:
+            msg += f"\n  Unexpected in your scale: {extra!r}"
+        raise ValueError(msg)
+
+    domain = list(user_keys)
+    range_ = [user_scale[k] for k in user_keys]
+    if _UNKNOWN in categories:
+        domain.append(_UNKNOWN)
+        range_.append(_GRAY)
+    return domain, range_
 
 
 def _resolve_legend_values(

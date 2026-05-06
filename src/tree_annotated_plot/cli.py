@@ -13,6 +13,7 @@ parameter takes one edit to `_config.py`; both surfaces pick it up.
 from __future__ import annotations
 
 import dataclasses
+import json
 import types
 import typing
 from pathlib import Path
@@ -29,6 +30,100 @@ from ._config import (
 from ._plot import _build
 
 _SCALAR_CLICK_TYPE = {int: click.INT, float: click.FLOAT, str: click.STRING}
+
+
+class _ColorScaleParamType(click.ParamType):
+    """Parse a `"key1=color1,key2=color2,..."` string into an ordered dict.
+
+    Supports hex colors (e.g. ``"K=#416DCE,J.2=#59A3AA"``) — the user must
+    quote the whole argument so the shell doesn't interpret `#` as a
+    comment. An empty/blank value yields ``None``.
+    """
+
+    name = "color_scale"
+
+    def convert(self, value, param, ctx):  # type: ignore[override]
+        if value is None or isinstance(value, dict):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None
+        result: dict[str, str] = {}
+        for piece in text.split(","):
+            piece = piece.strip()
+            if not piece:
+                continue
+            if "=" not in piece:
+                self.fail(
+                    f"expected 'key=color' pairs separated by commas; "
+                    f"got {piece!r}.",
+                    param,
+                    ctx,
+                )
+            key, color = piece.split("=", 1)
+            key = key.strip()
+            color = color.strip()
+            if not key or not color:
+                self.fail(f"empty key or color in {piece!r}.", param, ctx)
+            if key in result:
+                self.fail(f"duplicate key {key!r} in tree_color_scale.", param, ctx)
+            result[key] = color
+        return result or None
+
+
+_COLOR_SCALE_PARAM_TYPE = _ColorScaleParamType()
+
+
+class _JsonDictParamType(click.ParamType):
+    """Parse a JSON-object string into a dict.
+
+    Used for ``--tree-color-legend-format``: any subset of Vega-Lite's
+    Legend properties as a JSON object (e.g.
+    ``'{"orient":"left","labelFontSize":13}'``). The user must quote the
+    whole argument so the shell doesn't interpret braces or quotes.
+    """
+
+    name = "json_dict"
+
+    def convert(self, value, param, ctx):  # type: ignore[override]
+        if value is None or isinstance(value, dict):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            self.fail(f"invalid JSON: {exc}", param, ctx)
+        if not isinstance(parsed, dict):
+            self.fail(
+                f'expected a JSON object (e.g. \'{{"orient":"left"}}\'); '
+                f"got {type(parsed).__name__}.",
+                param,
+                ctx,
+            )
+        return parsed
+
+
+_JSON_DICT_PARAM_TYPE = _JsonDictParamType()
+
+
+def _is_str_dict(tp: Any) -> bool:
+    """Return True for `dict[str, str]` only (not `dict[str, Any]`)."""
+    if get_origin(tp) is dict:
+        args = get_args(tp)
+        return args == (str, str)
+    return False
+
+
+def _is_dict_any(tp: Any) -> bool:
+    """Return True for `dict[str, Any]` or a bare `dict`."""
+    if tp is dict:
+        return True
+    if get_origin(tp) is dict:
+        args = get_args(tp)
+        return args == (str, Any) or args == ()
+    return False
 
 
 def _option_for_field(field: dataclasses.Field, hints: dict) -> Any:
@@ -73,12 +168,48 @@ def _option_for_field(field: dataclasses.Field, hints: dict) -> Any:
             kwargs["required"] = True
         return click.option(cli_name, **kwargs)
 
+    # dict[str, str] (with or without `| None`) → custom comma-separated parser.
+    if _is_str_dict(real_type):
+        return click.option(
+            cli_name,
+            type=_COLOR_SCALE_PARAM_TYPE,
+            default=field.default if has_default else None,
+            help=description,
+            show_default=False,
+        )
+
+    # dict[str, Any] (with or without `| None`) → JSON-object parser.
+    if _is_dict_any(real_type):
+        return click.option(
+            cli_name,
+            type=_JSON_DICT_PARAM_TYPE,
+            default=field.default if has_default else None,
+            help=description,
+            show_default=False,
+        )
+
     # Optional / Union — unwrap to the non-None branch.
     origin = get_origin(real_type)
     if origin in (typing.Union, types.UnionType):
         non_none = [a for a in get_args(real_type) if a is not type(None)]
         if len(non_none) == 1:
             inner = non_none[0]
+            if _is_str_dict(inner):
+                return click.option(
+                    cli_name,
+                    type=_COLOR_SCALE_PARAM_TYPE,
+                    default=field.default if has_default else None,
+                    help=description,
+                    show_default=False,
+                )
+            if _is_dict_any(inner):
+                return click.option(
+                    cli_name,
+                    type=_JSON_DICT_PARAM_TYPE,
+                    default=field.default if has_default else None,
+                    help=description,
+                    show_default=False,
+                )
             if get_origin(inner) is Literal:
                 choices = [str(c) for c in get_args(inner)]
                 return click.option(

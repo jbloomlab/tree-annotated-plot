@@ -183,6 +183,45 @@ def _render_kikawa() -> None:
     )
     _save_pair(out, "h3n2_combined_genotype_158")
 
+    # H3N2 once more, demonstrating all four appearance-tuning knobs:
+    # an explicit `tree_color_scale` (Okabe-Ito-inspired colorblind-safe
+    # palette, ordered K, J.2.4, J.2.3, J.2.2, J.2, G.1.3.1), a 14-pt
+    # legend on the left, and a 14-pt scale-bar label.
+    h3n2_chart_custom = builder.make_chart(
+        subtype="H3N2",
+        chart_type="iqr",
+        titers=titers,
+        viruses=viruses,
+        metadata=metadata,
+        all_cohorts=all_cohorts,
+    )
+    out = tree_annotated_plot.plot(
+        DATA_DIR / "flu-seqneut-2025to2026_H3N2.json",
+        h3n2_chart_custom,
+        chart_strain_field="axis_label",
+        tree_strain_field="derived_haplotype",
+        branch_length="div",
+        tree_size=140,
+        scale_bar=True,
+        branch_length_units="substitutions",
+        color_tree_by="subclade",
+        tree_color_scale={
+            "K": "#0072B2",
+            "J.2.4": "#009E73",
+            "J.2.3": "#D55E00",
+            "J.2.2": "#CC79A7",
+            "J.2": "#56B4E9",
+            "G.1.3.1": "#E69F00",
+        },
+        tree_color_legend_format={
+            "orient": "left",
+            "labelFontSize": 14,
+            "titleFontSize": 14,
+        },
+        scale_bar_font_size=14,
+    )
+    _save_pair(out, "h3n2_combined_custom_colors")
+
 
 def main() -> None:
     """Render every example to SVG + interactive HTML under `docs/`."""

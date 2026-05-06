@@ -170,6 +170,98 @@ so renders three states (N, K, D):
 CLI flag: `--color-tree-by genotype:HA1:158`. In Python:
 `color_tree_by="genotype:HA1:158"`.
 
+### Customizing the colors and legend
+
+Four optional knobs let you override the defaults:
+
+- `tree_color_scale` — supply your own `{category: color}` mapping
+  instead of the Auspice palette. Keys must match the tree's
+  categories one-to-one (extras or misses are an error). The legend
+  order follows the order of keys you pass. `"unknown"` is always
+  gray and must not be specified.
+- `tree_color_legend_format` — pass any subset of Vega-Lite's
+  [Legend properties](https://vega.github.io/vega-lite/docs/legend.html#properties)
+  as a dict to style the legend (`orient`, `direction`, `columns`,
+  `padding`, `offset`, `labelFontSize`, `titleFontSize`, …). Smart
+  default: when `orient` is `"left"` or `"right"` and you have not
+  set `columns` or `direction`, entries stack vertically
+  (`columns=1` is forced).
+- `tree_color_legend_show` — set to `False` to hide the legend
+  entirely while keeping the tree colored.
+- `scale_bar_font_size` — font size for the scale bar's label.
+
+The exact category strings depend on the form of `color_tree_by`:
+
+| `color_tree_by` | Example category strings |
+|---|---|
+| node attribute (e.g. `"subclade"`) | `"K"`, `"J.2"`, `"J.2.4"` |
+| `"genotype:HA1:158"` (single site) | `"K158"`, `"R158"`, `"E158"` |
+| `"genotype:HA1:158,189"` (both sites vary) | `"K158/E189"`, `"R158/E189"` |
+| `"genotype:HA1:158,189"` (189 invariant) | `"K158"`, `"R158"` (invariant site dropped) |
+
+If you pass keys that don't match, the error message lists the
+tree's actual categories so you can copy them.
+
+The H3N2 example below puts all four knobs to work: an explicit
+6-color palette (a colorblind-safe Okabe–Ito-inspired set) ordered
+K → J.2.4 → J.2.3 → J.2.2 → J.2 → G.1.3.1, the legend moved to the
+**left** of the combined plot at 14-pt, and a matching 14-pt
+scale-bar label.
+
+![H3N2 combined chart with custom colors and legend](images/h3n2_combined_custom_colors.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_combined_custom_colors.html){target="_blank"}
+
+```python
+out = tree_annotated_plot.plot(
+    "examples/data/flu-seqneut-2025to2026_H3N2.json",
+    chart,
+    chart_strain_field="axis_label",
+    tree_strain_field="derived_haplotype",
+    branch_length="div",
+    tree_size=140,
+    scale_bar=True,
+    branch_length_units="substitutions",
+    color_tree_by="subclade",
+    tree_color_scale={
+        "K": "#0072B2",
+        "J.2.4": "#009E73",
+        "J.2.3": "#D55E00",
+        "J.2.2": "#CC79A7",
+        "J.2": "#56B4E9",
+        "G.1.3.1": "#E69F00",
+    },
+    tree_color_legend_format={
+        "orient": "left",
+        "labelFontSize": 14,
+        "titleFontSize": 14,
+    },
+    scale_bar_font_size=14,
+)
+```
+
+`--tree-color-scale` on the CLI is a comma-separated list of
+`key=color` pairs and `--tree-color-legend-format` is a JSON object
+string (quote the whole argument in both cases so the shell doesn't
+interpret `#`, braces, or quotes):
+
+```bash
+tree-annotated-plot \
+    --tree examples/data/flu-seqneut-2025to2026_H3N2.json \
+    --chart examples/data/flu-seqneut-2025to2026_H3N2_titers.json \
+    --chart-strain-field axis_label \
+    --tree-strain-field derived_haplotype \
+    --branch-length div \
+    --tree-size 140 \
+    --scale-bar \
+    --branch-length-units substitutions \
+    --color-tree-by subclade \
+    --tree-color-scale "K=#0072B2,J.2.4=#009E73,J.2.3=#D55E00,J.2.2=#CC79A7,J.2=#56B4E9,G.1.3.1=#E69F00" \
+    --tree-color-legend-format '{"orient":"left","labelFontSize":14,"titleFontSize":14}' \
+    --scale-bar-font-size 14 \
+    --output examples/data/h3n2_combined_custom_colors.html
+```
+
 ### Reproduce — command line
 
 ```bash
