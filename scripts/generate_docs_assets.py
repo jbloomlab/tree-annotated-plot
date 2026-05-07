@@ -122,7 +122,11 @@ def _render_kikawa() -> None:
             # Color H3N2 by subclade so the docs SVG matches what users see
             # on Nextstrain. The Auspice JSON's meta.colorings.subclade has
             # no `scale` defined, so colors come from the default palette.
+            # Place the subclade legend on the left so it doesn't compete
+            # with the cohort-selection legend that already sits at the
+            # bottom of the chart.
             plot_kwargs["color_tree_by"] = "subclade"
+            plot_kwargs["tree_color_legend_format"] = {"orient": "left"}
         out = tree_annotated_plot.plot(
             DATA_DIR / f"flu-seqneut-2025to2026_{subtype}.json",
             chart,
@@ -155,6 +159,7 @@ def _render_kikawa() -> None:
         strain_label_font_size=9,
         shift_tree_loc=60,
         color_tree_by="subclade",
+        tree_color_legend_format={"orient": "left"},
     )
     _save_pair(out, "h3n2_combined_label_connect")
 
@@ -180,6 +185,7 @@ def _render_kikawa() -> None:
         scale_bar=True,
         branch_length_units="substitutions",
         color_tree_by="genotype:HA1:158",
+        tree_color_legend_format={"orient": "left"},
     )
     _save_pair(out, "h3n2_combined_genotype_158")
 
