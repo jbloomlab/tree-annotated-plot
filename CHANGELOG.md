@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `mark_line`, `mark_trail`, and `mark_area` now connect points in tree
+  tip order regardless of other encodings on the chart. Previously, a
+  user chart with an explicit categorical color-scale `domain` rendered
+  with crisscrossing line segments because Vega-Lite's default
+  connection-order heuristic ignored the strain-axis sort. The package
+  now attaches a `calculate` transform that derives a per-row tip rank
+  and points the `order` channel at that field on these marks. Any
+  user-supplied `order` is left in place.
 - When `color_tree_by` is used together with a user chart that has its
   own `color` encoding (e.g. a titer plot colored by `cell_line`), the
   user chart's marks no longer disappear. The concat container now
