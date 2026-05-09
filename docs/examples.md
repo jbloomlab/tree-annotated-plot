@@ -105,8 +105,12 @@ edge.
 
 The H3N2 example above is rendered with `color_tree_by="subclade"`,
 which colors the tree's branches and tip circles by the
-`node_attrs.subclade` value at each node and adds a categorical legend
-below the plot. See "Color the tree" below for the full set of options.
+`node_attrs.subclade` value at each node. The package's default places
+the categorical legend at the bottom of the combined plot; here we pass
+`tree_color_legend_format={"orient": "left"}` to push it to the left
+side instead, so it doesn't compete with the cohort-selection legend
+already sitting below the chart. See "Color the tree" below for the
+full set of options.
 
 ### Optional: connect leaders all the way to the labels
 
@@ -156,8 +160,11 @@ Colors match what you'd see on the Nextstrain view of the same tree —
 either from the JSON's palette information when the build provides it,
 or from the same default palette Auspice uses when it doesn't.
 Categories are ordered by descending frequency in both cases. Missing
-values render in gray, and the legend is drawn at the bottom of the
-combined plot.
+values render in gray. By default the legend is drawn at the bottom of
+the combined plot; the H3N2 examples in this section pass
+`tree_color_legend_format={"orient": "left"}` to move it to the left
+instead, since the bottom edge already carries the cohort-selection
+legend.
 
 The example below colors the same H3N2 chart by genotype at HA1
 site 158, which has two mutations in the tree (`N158K`, `N158D`) and
@@ -277,6 +284,7 @@ tree-annotated-plot \
     --scale-bar \
     --branch-length-units substitutions \
     --color-tree-by subclade \
+    --tree-color-legend-format '{"orient":"left"}' \
     --output examples/data/h3n2_combined.json
 ```
 
@@ -295,6 +303,7 @@ out = tree_annotated_plot.plot(
     scale_bar=True,
     branch_length_units="substitutions",
     color_tree_by="subclade",
+    tree_color_legend_format={"orient": "left"},
 )
 ```
 

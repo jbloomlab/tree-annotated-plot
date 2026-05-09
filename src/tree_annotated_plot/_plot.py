@@ -233,6 +233,28 @@ def _build(
             ch.axis = alt.Axis(labels=False, ticks=False, domain=False, title=None)
         n_hits += 1
     _check_walker_hits("strain-axis update", n_hits, len(axis_hits), axis)
+
+    # Pin line/trail/area connection order to tip order via Vega-Lite's
+    # `order` channel. Without this, an explicit categorical `color` scale
+    # `domain` (or other encoding choices) can shift Vega-Lite's
+    # connection-order heuristic away from the strain-axis sort, causing
+    # lines to crisscross. The order channel's `sort` only accepts
+    # ascending/descending, so we attach a `calculate` transform that
+    # computes a per-row tip rank and point `order` at that derived
+    # quantitative field. User-supplied `order` always wins.
+    rank_expr = (
+        f"indexof({json.dumps(list(tip_names))}, "
+        f"datum[{json.dumps(config.chart_strain_field)}])"
+    )
+    for node in _iter_connection_order_nodes(new_chart, config.chart_strain_field):
+        enc = _live_attr(node, "encoding")
+        if _live_attr(enc, "order") is not None:
+            continue
+        existing = _live_attr(node, "transform") or []
+        node.transform = list(existing) + [
+            {"calculate": rank_expr, "as": _TIP_ORDER_RANK_FIELD}
+        ]
+        enc.order = alt.Order(f"{_TIP_ORDER_RANK_FIELD}:Q")
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
     combined = _concat_for_location(
@@ -276,22 +298,32 @@ def _concat_for_location(
     user_chart: alt.TopLevelMixin,
     location: TreeLocation,
 ) -> alt.HConcatChart | alt.VConcatChart:
-    """Concat tree and chart in the order implied by the tree's location."""
+    """Concat tree and chart in the order implied by the tree's location.
+
+    The strain axis is resolved independent so the tree and chart can use
+    different scales on that axis (the tree's branch length vs. the chart's
+    measurement value), while still sharing the orthogonal strain axis. The
+    `color` scale is also resolved independent: when ``color_tree_by`` is set
+    the tree panel emits a `color_value:N` color scale with a tree-specific
+    domain, and Vega-Lite's default of sharing color across concat views
+    would merge it with any color encoding on the user's chart, hiding
+    user-chart marks whose color values aren't in the tree's domain.
+    """
     if location == "left":
         return alt.hconcat(tree_chart, user_chart, spacing=0).resolve_scale(
-            y="independent"
+            y="independent", color="independent"
         )
     if location == "right":
         return alt.hconcat(user_chart, tree_chart, spacing=0).resolve_scale(
-            y="independent"
+            y="independent", color="independent"
         )
     if location == "top":
         return alt.vconcat(tree_chart, user_chart, spacing=0).resolve_scale(
-            x="independent"
+            x="independent", color="independent"
         )
     if location == "bottom":
         return alt.vconcat(user_chart, tree_chart, spacing=0).resolve_scale(
-            x="independent"
+            x="independent", color="independent"
         )
     raise ValueError(f"unreachable: tree_location={location!r}")
 
@@ -997,6 +1029,65 @@ def _live_attr(obj: Any, name: str) -> Any:
     if v is alt.Undefined:
         return None
     return v
+
+
+# Vega-Lite marks whose drawing order along the discrete axis is determined
+# by the order channel (rule 1 of the connection-order fallback chain). For
+# these marks pinning the order channel to a per-row tip-order rank ensures
+# the line / trail / area connects strains in tip order regardless of how
+# Vega-Lite would otherwise resolve the fallback (e.g. when an explicit
+# color-scale `domain` shifts it away from the y-axis sort).
+_CONNECTION_ORDER_MARKS = frozenset({"line", "trail", "area"})
+
+# Derived field name appended to each connection-order mark's transform
+# pipeline. Chosen to be unlikely to collide with user data; private prefix
+# makes the intent clear if anyone inspects the rendered spec.
+_TIP_ORDER_RANK_FIELD = "_tap_strain_order_idx"
+
+
+def _mark_type(node: Any) -> str | None:
+    """Return the mark type string for a chart node, or None.
+
+    Handles altair's two mark forms: the plain string (e.g. ``"line"`` from
+    ``chart.mark_line()``) and the ``MarkDef`` object (e.g. from
+    ``chart.mark_line(point=True)``). Container nodes (LayerChart,
+    HConcatChart, etc.) have no mark and return None.
+    """
+    mark = _live_attr(node, "mark")
+    if mark is None:
+        return None
+    if isinstance(mark, str):
+        return mark
+    type_ = _live_attr(mark, "type")
+    return type_ if isinstance(type_, str) else None
+
+
+def _iter_connection_order_nodes(node: Any, chart_strain_field: str) -> Iterator[Any]:
+    """Yield the live chart node for every node whose mark is in
+    ``_CONNECTION_ORDER_MARKS`` and whose ``x``/``y`` strain encoding
+    matches ``chart_strain_field``.
+
+    Mirrors `_iter_strain_axis_channels`'s traversal (hconcat / vconcat /
+    concat / layer / spec descent). Yields the node itself (not just the
+    encoding) so the caller can attach both a ``calculate`` transform and
+    the ``order`` channel.
+    """
+    if _mark_type(node) in _CONNECTION_ORDER_MARKS:
+        enc = _live_attr(node, "encoding")
+        if enc is not None:
+            for channel in ("x", "y"):
+                ch = _live_attr(enc, channel)
+                if ch is not None and _channel_field(ch) == chart_strain_field:
+                    yield node
+                    break
+    for attr in ("hconcat", "vconcat", "concat", "layer"):
+        sub = _live_attr(node, attr)
+        if isinstance(sub, list):
+            for s in sub:
+                yield from _iter_connection_order_nodes(s, chart_strain_field)
+    spec = _live_attr(node, "spec")
+    if spec is not None:
+        yield from _iter_connection_order_nodes(spec, chart_strain_field)
 
 
 def _pop_toplevel_only_attrs(

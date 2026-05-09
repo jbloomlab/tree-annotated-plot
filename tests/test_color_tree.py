@@ -663,6 +663,40 @@ def test_color_tree_by_legend_hides_internal_only_unknown():
         assert "unknown" in enc["scale"]["domain"]
 
 
+def test_color_tree_by_color_scale_independent_from_user_chart():
+    """When the tree is colored, the concat container must resolve the color
+    scale as `independent` so the tree's `color_value:N` scale doesn't merge
+    with a user-chart color encoding (which would hide user marks whose
+    color values aren't in the tree's domain)."""
+    df = pd.DataFrame(
+        {
+            "strain": ["A", "B", "C", "D"] * 2,
+            "titer": [1.0, 2.0, 4.0, 8.0, 1.5, 2.5, 4.5, 8.5],
+            "cell_line": ["X", "X", "X", "X", "Y", "Y", "Y", "Y"],
+        }
+    )
+    user_chart = (
+        alt.Chart(df)
+        .mark_line(point=True)
+        .encode(
+            x="titer:Q",
+            y=alt.Y("strain:N"),
+            color=alt.Color("cell_line:N"),
+        )
+        .properties(width=200, height=200)
+    )
+    out = tree_annotated_plot.plot(
+        _attr_auspice(),
+        user_chart,
+        **_kw(),
+        color_tree_by="subclade",
+    )
+    spec = out.to_dict()
+    resolve = spec.get("resolve") or {}
+    scale = resolve.get("scale") or {}
+    assert scale.get("color") == "independent"
+
+
 # -----------------------------------------------------------------------------
 # CLI
 # -----------------------------------------------------------------------------
