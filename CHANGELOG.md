@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `prune_chart_to_tree` (default `False`): when on, chart rows whose
+  `chart_strain_field` value isn't a tree tip are filtered out before
+  drawing. CLI form:
+  `--prune-chart-to-tree / --no-prune-chart-to-tree`.
+  ([#6](https://github.com/jbloomlab/tree-annotated-plot/issues/6))
+
 ## [0.2.2] - 2026-05-09
 
 ### Fixed

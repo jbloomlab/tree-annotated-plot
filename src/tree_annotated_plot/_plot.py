@@ -55,6 +55,7 @@ def plot(
     scale_bar: bool = False,
     branch_length_units: str | None = None,
     prune_tree_to_chart: bool = False,
+    prune_chart_to_tree: bool = False,
     strict_version: bool = True,
     connect_leader_to_label: bool = False,
     strain_label_font_size: float = 10.0,
@@ -82,6 +83,7 @@ def plot(
             scale_bar=scale_bar,
             branch_length_units=branch_length_units,
             prune_tree_to_chart=prune_tree_to_chart,
+            prune_chart_to_tree=prune_chart_to_tree,
             strict_version=strict_version,
             connect_leader_to_label=connect_leader_to_label,
             strain_label_font_size=strain_label_font_size,
@@ -168,12 +170,33 @@ def _build(
 
     chart_strains = _extract_chart_strains(spec, axis_hits, config.chart_strain_field)
 
+    if config.prune_chart_to_tree and (set(chart_strains) - set(tip_names)):
+        _prune_chart_spec_to_strains(
+            spec,
+            chart_strain_field=config.chart_strain_field,
+            keep_strains=set(tip_names),
+        )
+        chart = alt.Chart.from_dict(spec)
+        chart_strains = _extract_chart_strains(
+            spec, axis_hits, config.chart_strain_field
+        )
+        if not chart_strains:
+            raise ValueError(
+                "prune_chart_to_tree=True dropped every chart row: no "
+                "chart strain matched any tree tip under "
+                f"chart_strain_field={config.chart_strain_field!r} / "
+                f"tree_strain_field={config.tree_strain_field!r}. Pruning "
+                "is meant for charts that bundle a superset of strains; "
+                "an empty intersection suggests a wrong field choice."
+            )
+
     _reconcile_tips_and_strains(
         tree_strains=tip_names,
         chart_strains=chart_strains,
         chart_strain_field=config.chart_strain_field,
         tree_strain_field=config.tree_strain_field,
         prune_tree_to_chart=config.prune_tree_to_chart,
+        prune_chart_to_tree=config.prune_chart_to_tree,
         chart_spec=spec,
         tree_source=tree,
     )
@@ -641,6 +664,70 @@ def _extract_chart_strains(
     return _extract_field_values_from_spec_data(spec, chart_strain_field)
 
 
+def _prune_chart_spec_to_strains(
+    spec: dict, *, chart_strain_field: str, keep_strains: set[str]
+) -> None:
+    """Filter a Vega-Lite spec in place to drop rows outside `keep_strains`.
+
+    Mutates three kinds of structure:
+      - top-level `datasets` entries (each a list of row-dicts).
+      - inline `data.values` lists anywhere in the spec tree.
+      - explicit `sort` lists on encoding channels bound to
+        `chart_strain_field` (any other `sort` is left alone).
+
+    Rows that don't carry `chart_strain_field` at all are preserved
+    (we have no signal to drop them). URL-backed data raises — we
+    can't fetch + filter at plot time, mirroring `_extract_chart_strains`.
+    """
+
+    def row_kept(row: Any) -> bool:
+        if not isinstance(row, dict):
+            return True
+        if chart_strain_field not in row:
+            return True
+        return row[chart_strain_field] in keep_strains
+
+    datasets = spec.get("datasets") if isinstance(spec, dict) else None
+    if isinstance(datasets, dict):
+        for name, rows in list(datasets.items()):
+            if isinstance(rows, list):
+                datasets[name] = [row for row in rows if row_kept(row)]
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            data = node.get("data")
+            if isinstance(data, dict):
+                if "url" in data:
+                    raise ValueError(
+                        f"chart references data via URL ({data['url']!r}); "
+                        "URL data is not supported, so prune_chart_to_tree "
+                        "cannot filter it. Materialize the data inline "
+                        "(via alt.Chart(df) with a pandas DataFrame) before "
+                        "saving the chart."
+                    )
+                if "values" in data and isinstance(data["values"], list):
+                    data["values"] = [row for row in data["values"] if row_kept(row)]
+            encoding = node.get("encoding")
+            if isinstance(encoding, dict):
+                for channel in encoding.values():
+                    if not isinstance(channel, dict):
+                        continue
+                    if channel.get("field") != chart_strain_field:
+                        continue
+                    sort = channel.get("sort")
+                    if isinstance(sort, list):
+                        channel["sort"] = [s for s in sort if s in keep_strains]
+            for k, v in node.items():
+                if k in ("data", "datasets"):
+                    continue
+                walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(spec)
+
+
 def _extract_field_values_from_spec_data(spec: dict, field: str) -> list[str]:
     """Walk spec for inline / named data and return distinct values of `field`.
 
@@ -708,13 +795,16 @@ def _reconcile_tips_and_strains(
     chart_strain_field: str,
     tree_strain_field: str,
     prune_tree_to_chart: bool,
+    prune_chart_to_tree: bool,
     chart_spec: dict,
     tree_source: Any,
 ) -> None:
     """Verify tree strains and chart strains are reconcilable.
 
     Three asymmetries:
-      - chart strains not in tree → always fatal.
+      - chart strains not in tree → fatal unless `prune_chart_to_tree=True`
+        (in which case the chart spec has already been pre-filtered upstream
+        and this set is expected to be empty by the time we get here).
       - tree tips not in chart → fatal unless `prune_tree_to_chart=True`.
       - (duplicate tree_strain_field values across tips → handled by the
         separate `_check_no_duplicate_tip_strains`.)
@@ -728,7 +818,9 @@ def _reconcile_tips_and_strains(
     chart_minus_tree = chart_set - tree_set
     tree_minus_chart = tree_set - chart_set
 
-    if not chart_minus_tree and (not tree_minus_chart or prune_tree_to_chart):
+    chart_ok = not chart_minus_tree
+    tree_ok = not tree_minus_chart or prune_tree_to_chart
+    if chart_ok and tree_ok:
         return
 
     hints = _candidate_field_hints(
@@ -748,6 +840,7 @@ def _reconcile_tips_and_strains(
             chart_minus_tree=chart_minus_tree,
             tree_minus_chart=tree_minus_chart,
             prune_tree_to_chart=prune_tree_to_chart,
+            prune_chart_to_tree=prune_chart_to_tree,
             hints=hints,
         )
     )
@@ -762,14 +855,16 @@ def _format_strain_mismatch(
     chart_minus_tree: set[str],
     tree_minus_chart: set[str],
     prune_tree_to_chart: bool,
+    prune_chart_to_tree: bool,
     hints: list[str],
 ) -> str:
     parts: list[str] = []
-    if chart_minus_tree:
+    if chart_minus_tree and not prune_chart_to_tree:
         parts.append(
             f"{len(chart_minus_tree)} chart strain(s) are not present in the "
-            "tree (these would be silently dropped if we pruned, so this is "
-            "always fatal)."
+            "tree. Pass `prune_chart_to_tree=True` to drop the offending "
+            "chart rows automatically (use with care — this discards plot "
+            "data)."
         )
     if tree_minus_chart and not prune_tree_to_chart:
         parts.append(
@@ -783,7 +878,7 @@ def _format_strain_mismatch(
     )
     parts.append("Sample chart_strain_field values: " f"{sorted(chart_strains)[:5]}")
     parts.append("Sample tree_strain_field values:  " f"{sorted(tree_strains)[:5]}")
-    if chart_minus_tree:
+    if chart_minus_tree and not prune_chart_to_tree:
         parts.append(f"Sample chart-only values: {sorted(chart_minus_tree)[:5]}")
     if tree_minus_chart and not prune_tree_to_chart:
         parts.append(f"Sample tree-only values:  {sorted(tree_minus_chart)[:5]}")
