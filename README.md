@@ -15,7 +15,7 @@ See [https://jbloomlab.github.io/tree-annotated-plot/](https://jbloomlab.github.
 
 ## Installation
 
-Released on [PyPI](https://pypi.org/project/tree-annotated-plot/). Requires Python 3.13+.
+Released on [PyPI](https://pypi.org/project/tree-annotated-plot/). Requires Python 3.11+.
 
 ```bash
 pip install tree-annotated-plot

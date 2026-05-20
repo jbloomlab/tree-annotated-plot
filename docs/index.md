@@ -27,7 +27,7 @@ sit on by default (left for y-axis, bottom for x-axis).
 ## Installation
 
 Released on [PyPI](https://pypi.org/project/tree-annotated-plot/).
-Requires Python 3.13+.
+Requires Python 3.11+.
 
 ```bash
 pip install tree-annotated-plot
@@ -36,7 +36,7 @@ pip install tree-annotated-plot
 To pin a specific version:
 
 ```bash
-pip install tree-annotated-plot==0.0.1
+pip install tree-annotated-plot==0.3.0
 ```
 
 To install the bleeding edge directly from the

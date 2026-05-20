@@ -263,6 +263,7 @@ def _stack_config_options(command: Any) -> Any:
         "Save the result as HTML / JSON / PNG / SVG / PDF "
         "(format is dispatched on --output's extension)."
     ),
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 @click.option(
     "--tree",

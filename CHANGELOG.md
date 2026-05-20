@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-19
+
 ### Added
 
 - `prune_chart_to_tree` (default `False`): when on, chart rows whose
@@ -14,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drawing. CLI form:
   `--prune-chart-to-tree / --no-prune-chart-to-tree`.
   ([#6](https://github.com/jbloomlab/tree-annotated-plot/issues/6))
+- `-h` is accepted as a short alias for `--help` on the
+  `tree-annotated-plot` CLI.
+
+### Changed
+
+- Minimum supported Python lowered from 3.13 to 3.11. CI still
+  runs on 3.13.
 
 ## [0.2.2] - 2026-05-09
 
