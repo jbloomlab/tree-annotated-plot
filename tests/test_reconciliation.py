@@ -73,7 +73,7 @@ def _chart_for_strains(strains: list[str], *, height: int = 200) -> alt.Chart:
     )
 
 
-# ---------- chart-not-in-tree (always fatal) ----------
+# ---------- chart-not-in-tree (fatal unless prune_chart_to_tree) ----------
 
 
 def test_chart_strain_not_in_tree_is_fatal_default() -> None:
@@ -90,9 +90,9 @@ def test_chart_strain_not_in_tree_is_fatal_default() -> None:
         )
 
 
-def test_chart_strain_not_in_tree_is_fatal_even_with_prune() -> None:
+def test_chart_strain_not_in_tree_is_fatal_with_only_tree_prune() -> None:
     """`prune_tree_to_chart=True` only drops *tree* tips. A chart strain
-    not in the tree still raises — pruning would silently lose plot data."""
+    not in the tree still raises — the two flags are orthogonal."""
     chart = _chart_for_strains(["A1", "A2", "X"])
     with pytest.raises(ValueError, match="not present in the tree"):
         tree_annotated_plot.plot(
@@ -102,6 +102,97 @@ def test_chart_strain_not_in_tree_is_fatal_even_with_prune() -> None:
             tree_strain_field="name",
             branch_length="div",
             prune_tree_to_chart=True,
+        )
+
+
+def test_chart_strain_not_in_tree_succeeds_with_prune_chart_to_tree() -> None:
+    """`prune_chart_to_tree=True` filters chart rows whose strain isn't a
+    tree tip. The resulting chart's strain-axis sort matches the kept tree
+    tip order, and the dropped strain is gone from the chart's data."""
+    chart = _chart_for_strains(["A1", "A2", "A3", "B1", "B2", "X"])
+    out = tree_annotated_plot.plot(
+        _auspice_two_clades(),
+        chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+        prune_chart_to_tree=True,
+    )
+    assert isinstance(out, alt.HConcatChart)
+    spec = out.to_dict()
+    # The strain-axis sort on the user-chart panel should be exactly the
+    # tree's tip order — no `X`.
+    sorts = []
+    for ch in out.hconcat:
+        ch_spec = ch.to_dict()
+        enc = ch_spec.get("encoding", {})
+        for channel in enc.values():
+            if isinstance(channel, dict) and channel.get("field") == "strain":
+                if isinstance(channel.get("sort"), list):
+                    sorts.append(channel["sort"])
+    assert sorts, "expected at least one strain-axis encoding with a sort"
+    for s in sorts:
+        assert "X" not in s
+        assert set(s) <= {"A1", "A2", "A3", "B1", "B2"}
+    # And the user-chart data (now in `datasets`) should not contain X rows.
+    for rows in (spec.get("datasets") or {}).values():
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            if "strain" in rows[0]:
+                assert all(r["strain"] != "X" for r in rows)
+
+
+def test_prune_chart_to_tree_zero_overlap_raises() -> None:
+    """If pruning would drop every chart row (no overlap with tree tips),
+    raise a clear error rather than producing an empty plot."""
+    chart = _chart_for_strains(["X", "Y", "Z"])
+    with pytest.raises(ValueError, match="dropped every chart row"):
+        tree_annotated_plot.plot(
+            _auspice_two_clades(),
+            chart,
+            chart_strain_field="strain",
+            tree_strain_field="name",
+            branch_length="div",
+            prune_chart_to_tree=True,
+        )
+
+
+def test_prune_chart_and_tree_combined() -> None:
+    """Both flags may be on at once: the chart has extras (X) and the tree
+    has tips the chart lacks (B1, B2). Pruning is bidirectional."""
+    chart = _chart_for_strains(["A1", "A2", "A3", "X"])
+    out = tree_annotated_plot.plot(
+        _auspice_two_clades(),
+        chart,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+        prune_tree_to_chart=True,
+        prune_chart_to_tree=True,
+    )
+    assert isinstance(out, alt.HConcatChart)
+    # Final intersection is {A1, A2, A3}: chart loses X, tree loses B1/B2.
+    found_sort = None
+    for ch in out.hconcat:
+        enc = ch.to_dict().get("encoding", {})
+        for channel in enc.values():
+            if isinstance(channel, dict) and channel.get("field") == "strain":
+                if isinstance(channel.get("sort"), list):
+                    found_sort = channel["sort"]
+    assert found_sort is not None
+    assert set(found_sort) == {"A1", "A2", "A3"}
+
+
+def test_prune_chart_to_tree_default_error_mentions_flag() -> None:
+    """When chart has strains not in tree and the user hasn't opted in,
+    the error message should suggest `prune_chart_to_tree=True`."""
+    chart = _chart_for_strains(["A1", "A2", "A3", "B1", "B2", "X"])
+    with pytest.raises(ValueError, match="prune_chart_to_tree=True"):
+        tree_annotated_plot.plot(
+            _auspice_two_clades(),
+            chart,
+            chart_strain_field="strain",
+            tree_strain_field="name",
+            branch_length="div",
         )
 
 

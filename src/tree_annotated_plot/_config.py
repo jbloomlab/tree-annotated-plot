@@ -109,9 +109,14 @@ class PlotConfig:
         "When off (default), tree tips not present in the chart's strain "
         "set are a fatal error. When on, those tips (and any internal "
         "nodes whose subtrees become empty) are dropped before drawing, "
-        "with single-child internals collapsed into their kept child. "
-        "Chart strains not present in the tree are *always* fatal "
-        "regardless of this flag — pruning would silently lose plot data.",
+        "with single-child internals collapsed into their kept child.",
+    ] = False
+
+    prune_chart_to_tree: Annotated[
+        bool,
+        "When off (default), chart strains not present in the tree are a "
+        "fatal error. When on, chart rows whose `chart_strain_field` "
+        "value isn't a tree tip are filtered out before drawing.",
     ] = False
 
     strict_version: Annotated[
