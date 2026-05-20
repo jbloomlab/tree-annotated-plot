@@ -27,6 +27,14 @@ def test_help_lists_data_options() -> None:
     assert "--output" in result.output
 
 
+def test_short_help_flag_is_alias_for_long() -> None:
+    """`-h` should produce identical output to `--help`."""
+    long_form = _runner().invoke(main, ["--help"])
+    short_form = _runner().invoke(main, ["-h"])
+    assert short_form.exit_code == 0
+    assert short_form.output == long_form.output
+
+
 def test_help_lists_auto_generated_options() -> None:
     """A handful of PlotConfig-derived options should appear in --help."""
     result = _runner().invoke(main, ["--help"])
