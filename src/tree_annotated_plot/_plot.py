@@ -49,6 +49,7 @@ def plot(
     branch_length: Literal["div", "num_date"],
     tree_size: int = 100,
     tree_location: TreeLocation | None = None,
+    spacing: int = 0,
     tree_line_width: float = 2.0,
     tree_node_size: float = 45,
     leader_line_width: float = 1.0,
@@ -77,6 +78,7 @@ def plot(
             branch_length=branch_length,
             tree_size=tree_size,
             tree_location=tree_location,
+            spacing=spacing,
             tree_line_width=tree_line_width,
             tree_node_size=tree_node_size,
             leader_line_width=leader_line_width,
@@ -281,7 +283,10 @@ def _build(
     hoisted_config, hoisted_other = _pop_toplevel_only_attrs(new_chart)
 
     combined = _concat_for_location(
-        tree_chart=tree_chart, user_chart=new_chart, location=location
+        tree_chart=tree_chart,
+        user_chart=new_chart,
+        location=location,
+        spacing=config.spacing,
     )
     _apply_combined_config(combined, hoisted_config)
     for k, v in hoisted_other.items():
@@ -320,6 +325,7 @@ def _concat_for_location(
     tree_chart: alt.TopLevelMixin,
     user_chart: alt.TopLevelMixin,
     location: TreeLocation,
+    spacing: int,
 ) -> alt.HConcatChart | alt.VConcatChart:
     """Concat tree and chart in the order implied by the tree's location.
 
@@ -333,19 +339,19 @@ def _concat_for_location(
     user-chart marks whose color values aren't in the tree's domain.
     """
     if location == "left":
-        return alt.hconcat(tree_chart, user_chart, spacing=0).resolve_scale(
+        return alt.hconcat(tree_chart, user_chart, spacing=spacing).resolve_scale(
             y="independent", color="independent"
         )
     if location == "right":
-        return alt.hconcat(user_chart, tree_chart, spacing=0).resolve_scale(
+        return alt.hconcat(user_chart, tree_chart, spacing=spacing).resolve_scale(
             y="independent", color="independent"
         )
     if location == "top":
-        return alt.vconcat(tree_chart, user_chart, spacing=0).resolve_scale(
+        return alt.vconcat(tree_chart, user_chart, spacing=spacing).resolve_scale(
             x="independent", color="independent"
         )
     if location == "bottom":
-        return alt.vconcat(user_chart, tree_chart, spacing=0).resolve_scale(
+        return alt.vconcat(user_chart, tree_chart, spacing=spacing).resolve_scale(
             x="independent", color="independent"
         )
     raise ValueError(f"unreachable: tree_location={location!r}")
@@ -1475,6 +1481,11 @@ def _build_scale_bar_layer(
 
 _LABEL_PAD_PX_MIN = 4
 _LABEL_PAD_RATIO = 0.4  # `LABEL_PAD_PX = max(MIN, font_size * RATIO)`
+# Gap between the labels and the chart, kept separate from the tree-facing pad
+# above because it clears the chart's frame rather than the deepest tip, and so
+# wants a small fixed clearance rather than the pad's larger, faster-growing one.
+_LABEL_CHART_GAP_PX_MIN = 3
+_LABEL_CHART_GAP_RATIO = 0.2  # `LABEL_CHART_GAP_PX = max(MIN, font_size * RATIO)`
 _LABEL_CHAR_PX_RATIO = 0.6  # rough proportional sans-serif glyph-width estimate
 _LABEL_HALO_RATIO = 0.6  # white-halo strokeWidth as a fraction of font_size
 
@@ -1614,9 +1625,15 @@ def _build_tree_chart(
         max_name_len = max((len(n) for n in names), default=0)
         char_px = strain_label_font_size * _LABEL_CHAR_PX_RATIO
         label_pad_px = max(_LABEL_PAD_PX_MIN, strain_label_font_size * _LABEL_PAD_RATIO)
+        chart_gap_px = max(
+            _LABEL_CHART_GAP_PX_MIN, strain_label_font_size * _LABEL_CHART_GAP_RATIO
+        )
         # Strip needs to fit the longest label plus `halo_px / 2` of halo
-        # extension on the leader-facing side, plus a small fixed pad.
-        label_pixel_width = label_pad_px + max_name_len * char_px + halo_px / 2
+        # extension on the leader-facing side, a pad between the tree and the
+        # text, and a smaller gap between the text and the chart.
+        label_pixel_width = (
+            label_pad_px + chart_gap_px + max_name_len * char_px + halo_px / 2
+        )
         strip_pixel_width = label_pixel_width - shift_tree_loc
         if strip_pixel_width <= 0:
             raise ValueError(
@@ -1629,9 +1646,13 @@ def _build_tree_chart(
         per_pixel = branch_span / tree_size if tree_size else 0.0
         extra_branch_units = strip_pixel_width * per_pixel
         chart_edge_branch = branch_max + extra_branch_units
-        tips_df = tips_df.assign(x_label=chart_edge_branch)
-        leader_df = tips_df[tips_df["x"] < chart_edge_branch].assign(
-            x2=chart_edge_branch
+        # Anchor the labels `chart_gap_px` *inside* the chart-facing edge rather
+        # than on it, so the text does not run up against the chart's frame. The
+        # leaders stop at the same place, where the text begins.
+        label_anchor_branch = chart_edge_branch - chart_gap_px * per_pixel
+        tips_df = tips_df.assign(x_label=label_anchor_branch)
+        leader_df = tips_df[tips_df["x"] < label_anchor_branch].assign(
+            x2=label_anchor_branch
         )
         extended_tree_size = tree_size + strip_pixel_width
     else:
@@ -1680,9 +1701,9 @@ def _build_tree_chart(
         # When connect_leader_to_label is on, the branch domain is extended
         # past `branch_max` to `chart_edge_branch` so the label strip has
         # data-units to occupy; tips at `branch_max` still sit at pixel
-        # `tree_size` on the panel. Each label's chart-facing edge is
-        # anchored at `chart_edge_branch` and aligned outward (right for
-        # tree on the left, left for tree on the right).
+        # `tree_size` on the panel. Each label's chart-facing edge sits
+        # `chart_gap_px` inside `chart_edge_branch`, aligned outward (right
+        # for tree on the left, left for tree on the right).
         if tree_location == "left":
             branch_domain = [branch_min, chart_edge_branch]
             text_align = "right"
@@ -1783,7 +1804,8 @@ def _build_tree_chart(
         # strip at bottom, opposite the chart above).
         # tree_location="bottom" → root at bottom → branch_max at top (label
         # strip at top, opposite the chart below).
-        # Each label's chart-facing edge is anchored at `chart_edge_branch`.
+        # Each label's chart-facing edge sits `chart_gap_px` inside
+        # `chart_edge_branch`.
         # The text mark is rotated 270° (reads bottom-to-top), which maps
         # pre-rotation `align="right"` to a top anchor (text extends down)
         # and `align="left"` to a bottom anchor (text extends up). For tree

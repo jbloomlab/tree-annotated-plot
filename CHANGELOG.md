@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `spacing` (default `0`): pixels of blank space between the tree panel and
+  the chart panel. `0` keeps the two butted together, as before. Distinct from
+  `shift_tree_loc`, which moves the tree within its own panel by resizing the
+  label strip. CLI form: `--spacing`.
+
 ### Changed
 
 - Pin `ruff` to `>=0.16,<0.17` and state the lint rules explicitly with
@@ -14,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   turned CI red on unchanged code; the selection is now a project decision
   rather than whatever the installed ruff defaults to. Development-only, no
   effect on the package.
+
+### Fixed
+
+- With `connect_leader_to_label` on, strain labels were anchored exactly on the
+  tree panel's chart-facing edge, so the text ran up against the chart's frame
+  and the frame line became hard to read. The pad that the label strip already
+  reserved is now applied between the text and the chart, and the leader lines
+  stop where the text begins rather than continuing to the panel edge. The gap
+  is `max(3, strain_label_font_size * 0.2)` px, and the tree panel grows by that
+  much, so a hand-tuned `shift_tree_loc` may want the same adjustment.
 
 ## [0.3.0] - 2026-05-19
 
