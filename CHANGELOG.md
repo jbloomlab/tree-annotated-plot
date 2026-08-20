@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Pin `ruff` to `>=0.16,<0.17` and state the lint rules explicitly with
+  `[tool.ruff.lint] select`. Ruff's *default* rule set widened in 0.16, which
+  turned CI red on unchanged code; the selection is now a project decision
+  rather than whatever the installed ruff defaults to. Development-only, no
+  effect on the package.
+
 ## [0.3.0] - 2026-05-19
 
 ### Added
