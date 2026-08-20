@@ -68,6 +68,15 @@ class PlotConfig:
         "(x-encoded).",
     ] = None
 
+    spacing: Annotated[
+        int,
+        "Pixels of blank space between the tree panel and the chart panel. "
+        "Default 0, which butts the two together. Distinct from "
+        "`shift_tree_loc`, which moves the tree within its own panel by "
+        "resizing the label strip; `spacing` sets the gap between the panels "
+        "and applies whether or not `connect_leader_to_label` is on.",
+    ] = 0
+
     tree_line_width: Annotated[
         float,
         "Stroke width (px) for the tree's branch lines. Default 2.",
@@ -155,8 +164,9 @@ class PlotConfig:
     shift_tree_loc: Annotated[
         int,
         "Pixels by which to shift the tree toward (positive) or away from "
-        "(negative) the chart. Default 0. Has no effect when "
-        "connect_leader_to_label is off.",
+        "(negative) the chart, by resizing the label strip inside the tree "
+        "panel. Default 0. Has no effect when connect_leader_to_label is off; "
+        "to set the gap between the tree and chart panels use `spacing`.",
     ] = 0
 
     color_tree_by: Annotated[

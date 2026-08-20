@@ -45,6 +45,7 @@ def test_help_lists_auto_generated_options() -> None:
         "--branch-length",
         "--tree-size",
         "--tree-location",
+        "--spacing",
         "--tree-line-width",
         "--scale-bar / --no-scale-bar",
         "--strict-version / --no-strict-version",

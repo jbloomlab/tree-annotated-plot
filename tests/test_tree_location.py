@@ -181,3 +181,55 @@ def test_right_with_x_encoded_strain_raises() -> None:
         tree_annotated_plot.plot(
             _auspice_4_tip(), _horizontal_chart(), tree_location="right", **_kw()
         )
+
+
+# ---------- spacing between the tree and chart panels ----------
+
+
+@pytest.mark.parametrize(
+    ("chart_fn", "location"),
+    [
+        (_vertical_chart, "left"),
+        (_vertical_chart, "right"),
+        (_horizontal_chart, "top"),
+        (_horizontal_chart, "bottom"),
+    ],
+)
+def test_spacing_defaults_to_zero(chart_fn, location) -> None:
+    """The default butts the two panels together, as before `spacing` existed."""
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), chart_fn(), tree_location=location, **_kw()
+    )
+    assert out.to_dict()["spacing"] == 0
+
+
+@pytest.mark.parametrize(
+    ("chart_fn", "location"),
+    [
+        (_vertical_chart, "left"),
+        (_vertical_chart, "right"),
+        (_horizontal_chart, "top"),
+        (_horizontal_chart, "bottom"),
+    ],
+)
+def test_spacing_propagates_to_the_concat(chart_fn, location) -> None:
+    """An explicit `spacing` reaches the top-level concat spec, for every
+    `tree_location` — the gap is between the two panels, so it applies
+    uniformly to the hconcat and vconcat forms alike."""
+    out = tree_annotated_plot.plot(
+        _auspice_4_tip(), chart_fn(), tree_location=location, spacing=7, **_kw()
+    )
+    assert out.to_dict()["spacing"] == 7
+
+
+def test_spacing_does_not_disturb_panel_sizes() -> None:
+    """Spacing is applied along the branch axis, between panels, so neither
+    panel's own dimensions change and strain-row alignment is untouched."""
+    out_zero = tree_annotated_plot.plot(_auspice_4_tip(), _vertical_chart(), **_kw())
+    out_gap = tree_annotated_plot.plot(
+        _auspice_4_tip(), _vertical_chart(), spacing=12, **_kw()
+    )
+    d_zero, d_gap = out_zero.to_dict(), out_gap.to_dict()
+    for i in (0, 1):
+        assert d_zero["hconcat"][i]["width"] == d_gap["hconcat"][i]["width"]
+        assert d_zero["hconcat"][i].get("height") == d_gap["hconcat"][i].get("height")

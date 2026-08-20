@@ -285,9 +285,9 @@ def test_default_leader_endpoint_stops_at_branch_max() -> None:
 
 def test_vertical_left_renders_text_with_right_align() -> None:
     """Vertical layout with `connect_leader_to_label=True` and default
-    `tree_location="left"`: tree on left, chart on right; labels flush
-    against the chart on the panel's right (chart-facing) edge. Text
-    mark uses `align="right"` and `x_label > branch_max`."""
+    `tree_location="left"`: tree on left, chart on right; labels sit just
+    inside the panel's right (chart-facing) edge. Text mark uses
+    `align="right"` and `x_label > branch_max`."""
     out = tree_annotated_plot.plot(_auspice(), _vertical_chart(), **_on_kw())
     text = _text_layer(out)
     assert text is not None
@@ -557,3 +557,48 @@ def test_default_off_keeps_user_axis_labels_intact() -> None:
     assert axis.get("labelFontWeight") == "bold"
     assert axis.get("labels") is not False
     assert axis.get("ticks") is not False
+
+
+# ---------- label inset from the chart-facing edge ----------
+
+
+def test_labels_sit_inside_the_chart_facing_edge() -> None:
+    """Labels are anchored one pad *inside* `chart_edge_branch` rather than on
+    it, so the glyphs do not run up against the chart panel's frame. The panel
+    itself still extends to `chart_edge_branch`, which is the chart-facing end
+    of the branch scale's domain."""
+    out = tree_annotated_plot.plot(_auspice(), _vertical_chart(), **_on_kw())
+    text = _text_layer(out)
+    assert text is not None
+    # tree on the left → branch domain is [branch_min, chart_edge_branch]
+    chart_edge_branch = text["encoding"]["x"]["scale"]["domain"][1]
+    rows = _resolve_dataset(out.to_dict(), text)
+    assert rows
+    for row in rows:
+        assert row["x_label"] < chart_edge_branch
+
+
+def test_labels_sit_inside_the_chart_facing_edge_horizontal() -> None:
+    """Same inset in horizontal layout, where the default tree_location is
+    "bottom" and the branch domain runs [branch_min, chart_edge_branch] on y."""
+    out = tree_annotated_plot.plot(_auspice(), _horizontal_chart(), **_on_kw())
+    text = _text_layer(out)
+    assert text is not None
+    chart_edge_branch = text["encoding"]["y"]["scale"]["domain"][1]
+    rows = _resolve_dataset(out.to_dict(), text)
+    assert rows
+    for row in rows:
+        assert row["x_label"] < chart_edge_branch
+
+
+def test_leaders_stop_where_the_labels_begin() -> None:
+    """The leaders run to the label anchor rather than on to the panel edge, so
+    the dashed line meets the text instead of passing under it to the frame."""
+    out = tree_annotated_plot.plot(_auspice(), _vertical_chart(), **_on_kw())
+    text = _text_layer(out)
+    assert text is not None
+    anchors = {row["x_label"] for row in _resolve_dataset(out.to_dict(), text)}
+    assert len(anchors) == 1, f"expected one shared label anchor, got {anchors}"
+    (anchor,) = anchors
+    for row in _resolve_dataset(out.to_dict(), _leader_layer(out)):
+        assert row["x2"] == pytest.approx(anchor)

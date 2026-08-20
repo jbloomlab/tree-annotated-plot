@@ -795,3 +795,30 @@ def test_cli_scale_bar_font_size(tmp_path):
     collect_text_marks(tree_panel, text_marks)
     sizes = [m.get("fontSize") for m in text_marks if "fontSize" in m]
     assert 16.0 in sizes or 16 in sizes
+
+
+def test_cli_spacing(tmp_path):
+    """`--spacing` reaches the saved spec's top-level concat gap."""
+    tree_path, chart_path, out_path = _cli_setup(
+        tmp_path, _attr_auspice(), _vertical_chart(["A", "B", "C", "D"])
+    )
+    _run_cli(
+        [
+            "--tree",
+            str(tree_path),
+            "--chart",
+            str(chart_path),
+            "--output",
+            str(out_path),
+            "--chart-strain-field",
+            "strain",
+            "--tree-strain-field",
+            "name",
+            "--branch-length",
+            "div",
+            "--spacing",
+            "9",
+        ]
+    )
+    spec = json.loads(out_path.read_text())
+    assert spec["spacing"] == 9
