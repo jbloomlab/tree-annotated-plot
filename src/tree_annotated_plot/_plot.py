@@ -1482,9 +1482,9 @@ def _build_scale_bar_layer(
 _LABEL_PAD_PX_MIN = 4
 _LABEL_PAD_RATIO = 0.4  # `LABEL_PAD_PX = max(MIN, font_size * RATIO)`
 # Gap between the labels and the chart, kept separate from the tree-facing pad
-# above because it clears the chart's frame rather than the deepest tip. Half
-# the tree-facing pad at every font size.
-_LABEL_CHART_GAP_PX_MIN = 2
+# above because it clears the chart's frame rather than the deepest tip, and so
+# wants a small fixed clearance rather than the pad's larger, faster-growing one.
+_LABEL_CHART_GAP_PX_MIN = 3
 _LABEL_CHART_GAP_RATIO = 0.2  # `LABEL_CHART_GAP_PX = max(MIN, font_size * RATIO)`
 _LABEL_CHAR_PX_RATIO = 0.6  # rough proportional sans-serif glyph-width estimate
 _LABEL_HALO_RATIO = 0.6  # white-halo strokeWidth as a fraction of font_size

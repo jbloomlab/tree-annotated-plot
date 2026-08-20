@@ -29,9 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the frame line became hard to read. The pad that the label strip already
   reserved is now applied between the text and the chart, and the leader lines
   stop where the text begins rather than continuing to the panel edge. The gap
-  is `max(2, strain_label_font_size * 0.2)` px, half the pad already kept on the
-  tree-facing side, and the tree panel grows by that much, so a hand-tuned
-  `shift_tree_loc` may want the same adjustment.
+  is `max(3, strain_label_font_size * 0.2)` px, and the tree panel grows by that
+  much, so a hand-tuned `shift_tree_loc` may want the same adjustment.
 
 ## [0.3.0] - 2026-05-19
 
