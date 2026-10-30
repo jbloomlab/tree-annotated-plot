@@ -52,6 +52,13 @@
   on `x` or `y`, overrides its sort to match the tree's tip order, and
   hconcat's or vconcat's a tree panel on the matching side. Tree dictates
   tip ordering; plot follows.
+- **Loaded specs go to `from_dict` unmodified.** Don't strip or rewrite
+  altair's annotations when loading a dict / JSON / HTML chart. Selection
+  params' `views` in particular are valid at the top level; removing them made
+  every compound chart with a selection fail to render ("Duplicate signal
+  name"). See `_load_chart`. Likewise, declare extra params by appending to
+  the combined chart's top-level `params`, never with `add_params`, which
+  recurses into sub-charts and raises on spec-loaded ones.
 - **Two surfaces, one config**: `tree_annotated_plot.plot()` and the `tree-annotated-plot`
   CLI both accept the same parameters via `PlotConfig`. They converge on
   `_build(tree, chart, config)` so they can never disagree.
@@ -78,7 +85,10 @@
 - **Eyeball examples after any rendering change.** There are no
   image-snapshot regression tests (vl-convert/font/platform variance
   makes them flaky), so visual regressions only get caught by
-  looking. After any change to `_plot.py`, `_tree.py`, the example
+  looking. Tests may still render with `vl_convert.vegalite_to_svg`
+  to check that a spec renders at all, or to assert discrete SVG
+  attributes such as a label's `font-weight` / `fill`; those are
+  deterministic. After any change to `_plot.py`, `_tree.py`, the example
   scripts, or anything they touch: run `scripts/build_docs.sh`, open
   `site/examples.html`, and click through each example — both the
   embedded SVG and the interactive HTML link. Confirm tip-row

@@ -390,9 +390,15 @@ def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLeve
     A live `alt.TopLevelMixin` is returned as-is — its `$schema` is
     irrelevant since the constructing altair version is necessarily the
     running altair version. For dict / JSON path / HTML path inputs we run
-    the Vega-Lite version check (under `strict_version`), strip altair's
-    `params[].views` round-trip annotations, and then dispatch to the right
-    chart subclass via `alt.Chart.from_dict(...)`.
+    the Vega-Lite version check (under `strict_version`) and then dispatch to
+    the right chart subclass via `alt.Chart.from_dict(...)`.
+
+    The spec goes to `from_dict` unmodified. In particular, each selection
+    param's `views` must survive: when `_build` nests a compound chart (layer
+    / facet / concat), altair keeps its params' existing `views`, and an
+    emptied list makes Vega-Lite define the selection in every view, which
+    fails with "Duplicate signal name". `views` is valid on top-level params,
+    which is the only place altair emits it.
     """
     if isinstance(chart_input, alt.TopLevelMixin):
         return chart_input
@@ -420,8 +426,9 @@ def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLeve
         )
 
     _check_chart_schema_version(spec, strict_version=strict_version)
+    # `from_dict` keeps references into the spec (e.g. the `datasets` row
+    # lists), so copy it to keep the caller's dict out of later mutation.
     spec = copy.deepcopy(spec)
-    _strip_params_views(spec)
     # `from_dict` with validate=True dispatches to the right subclass
     # (Chart / LayerChart / FacetChart / HConcatChart / VConcatChart /
     # ConcatChart) based on the spec's shape.
@@ -483,26 +490,6 @@ def _check_chart_schema_version(spec: dict, *, strict_version: bool) -> None:
             "file an issue.",
             stacklevel=3,
         )
-
-
-def _strip_params_views(spec: Any) -> None:
-    """Recursively delete `views` from every params[] entry.
-
-    altair's `to_dict()` annotates each selection-param with the views it's
-    bound to, but altair's own `from_dict()` validation rejects the field.
-    Stripping is safe: the renderer rebinds params to views on its own.
-    """
-    if isinstance(spec, dict):
-        params = spec.get("params")
-        if isinstance(params, list):
-            for p in params:
-                if isinstance(p, dict):
-                    p.pop("views", None)
-        for v in spec.values():
-            _strip_params_views(v)
-    elif isinstance(spec, list):
-        for item in spec:
-            _strip_params_views(item)
 
 
 class _ScriptCollector(HTMLParser):

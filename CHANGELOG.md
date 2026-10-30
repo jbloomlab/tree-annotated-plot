@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A chart with selection parameters on a compound chart (layer, facet, or
+  concat) failed to render when passed to `plot()` as a JSON path, HTML path
+  or spec dict, which is every CLI use. Vega-Lite reported
+  `Duplicate signal name: "<selection>_tuple"`. This affected the flu examples'
+  CLI reproductions. The chart loader removed each selection's `views` before
+  loading, and altair then emitted empty `views`, which makes Vega-Lite define
+  the selection in every view. The loader now leaves the spec's `views` intact.
+  Live altair charts were never affected.
+
 ## [0.4.0] - 2026-08-20
 
 ### Added
