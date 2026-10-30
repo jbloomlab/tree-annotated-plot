@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `strain_label_styles` (default `None`): style a subset of the strain labels
+  rendered in the tree panel when `connect_leader_to_label` is on, e.g. to draw
+  the vaccine strains' labels in bold red. A list of rules, each naming some
+  `strains` and a `style` of Vega-Lite text properties (`fill`, `opacity`,
+  `fontWeight`, `fontStyle`). Where rules overlap, later rules win property by
+  property. An optional `when` condition applies a rule only while it holds:
+  - the name of a parameter declared in the chart, such as a checkbox;
+  - any Vega expression, e.g. `"emphasis == 'cell'"` for a radio button;
+  - in Python, an `alt.Parameter`, which is declared on the returned chart if
+    the chart doesn't already declare it.
+
+  Each styled property becomes a per-label expression on the existing label
+  layers, so no layers are added and the returned chart keeps its shape. A
+  strain that isn't a tree tip raises; strains dropped by `prune_tree_to_chart`
+  are skipped. CLI form: `--strain-label-styles` with a JSON array, where
+  `when` names a parameter saved in the chart JSON.
+  ([#12](https://github.com/jbloomlab/tree-annotated-plot/issues/12))
+
 ### Fixed
 
 - A chart with selection parameters on a compound chart (layer, facet, or
@@ -17,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loading, and altair then emitted empty `views`, which makes Vega-Lite define
   the selection in every view. The loader now leaves the spec's `views` intact.
   Live altair charts were never affected.
+- The `plot()` docstring's Returns section described the panel order wrongly
+  for a strain on `x`. The default `tree_location="bottom"` puts the chart
+  first and the tree second. The section now gives the order for each
+  `tree_location`.
 
 ## [0.4.0] - 2026-08-20
 

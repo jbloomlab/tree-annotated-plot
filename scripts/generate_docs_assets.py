@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import altair as alt
+
 import tree_annotated_plot
 
 REPO = Path(__file__).resolve().parent.parent
@@ -162,6 +164,47 @@ def _render_kikawa() -> None:
         tree_color_legend_format={"orient": "left"},
     )
     _save_pair(out, "h3n2_combined_label_connect")
+
+    # The same label-connect H3N2 chart, with the recent vaccine strains'
+    # labels drawn in bold red while a checkbox is ticked: `strain_label_styles`
+    # with a `when` param. The checkbox starts ticked so the static SVG shows
+    # the emphasis.
+    h3n2_chart_styles = builder.make_chart(
+        subtype="H3N2",
+        chart_type="iqr",
+        titers=titers,
+        viruses=viruses,
+        metadata=metadata,
+        all_cohorts=all_cohorts,
+    )
+    vaccine_strains = alt.param(
+        name="vaccine_strains",
+        value=True,
+        bind=alt.binding_checkbox(name="highlight vaccine strains "),
+    )
+    out = tree_annotated_plot.plot(
+        DATA_DIR / "flu-seqneut-2025to2026_H3N2.json",
+        h3n2_chart_styles,
+        chart_strain_field="axis_label",
+        tree_strain_field="derived_haplotype",
+        branch_length="div",
+        tree_size=140,
+        scale_bar=True,
+        branch_length_units="substitutions",
+        connect_leader_to_label=True,
+        strain_label_font_size=9,
+        shift_tree_loc=60,
+        color_tree_by="subclade",
+        tree_color_legend_format={"orient": "left"},
+        strain_label_styles=[
+            {
+                "strains": builder.vaccine_axis_labels(viruses, "H3N2"),
+                "style": {"fill": "#d62728", "fontWeight": "bold"},
+                "when": vaccine_strains,
+            }
+        ],
+    )
+    _save_pair(out, "h3n2_combined_label_styles")
 
     # H3N2 once more, colored by genotype at HA1 site 158: same chart and
     # default layout as `h3n2_combined`, with `color_tree_by` switched to

@@ -140,6 +140,77 @@ CLI flags: `--connect-leader-to-label --strain-label-font-size 9
 --shift-tree-loc 60`. In Python:
 `connect_leader_to_label=True, strain_label_font_size=9, shift_tree_loc=60`.
 
+### Optional: emphasize some strains' labels
+
+With label connection on, you can also style a subset of the labels, for
+example so the vaccine strains are easy to pick out. Pass
+`strain_label_styles`, a list of rules. Each rule names some `strains`
+(tree tip identifiers, i.e. `tree_strain_field` values) and a `style` built
+from Vega-Lite text properties: `fill`, `opacity`, `fontWeight` and
+`fontStyle`. A rule can also take a `when` condition, usually the name of a
+checkbox parameter, so the style applies only while the box is ticked.
+Where rules overlap, later rules win.
+
+The example below draws the labels of the H3N2 recent vaccine strains in
+bold red, with a checkbox that turns the emphasis off and on:
+
+![H3N2 with vaccine-strain labels in bold red](images/h3n2_combined_label_styles.svg)
+
+[Open the interactive chart in a new tab →](charts/h3n2_combined_label_styles.html){target="_blank"}
+
+From the CLI, a `when` parameter has to be declared in the saved chart, so
+add it before saving:
+
+```python
+chart = chart.add_params(
+    alt.param(
+        name="vaccine_strains",
+        value=True,
+        bind=alt.binding_checkbox(name="highlight vaccine strains "),
+    )
+)
+chart.save("titers.json")
+```
+
+then pass the rules as a JSON array, alongside the label-connection flags
+above:
+
+```bash
+--connect-leader-to-label --strain-label-styles \
+    '[{"strains": ["J.2.4", "J.2:S145N"],
+       "style": {"fill": "#d62728", "fontWeight": "bold"},
+       "when": "vaccine_strains"}]'
+```
+
+In Python, pass the parameter object itself. If your chart doesn't already
+declare it, it is declared on the returned chart for you:
+
+```python
+vaccine_strains = alt.param(
+    name="vaccine_strains",
+    value=True,
+    bind=alt.binding_checkbox(name="highlight vaccine strains "),
+)
+tree_annotated_plot.plot(
+    ...,
+    connect_leader_to_label=True,
+    strain_label_styles=[
+        {
+            "strains": ["J.2.4", "J.2:S145N"],
+            "style": {"fill": "#d62728", "fontWeight": "bold"},
+            "when": vaccine_strains,
+        }
+    ],
+)
+```
+
+Leave out `when` for a style that is always on. `when` can be any Vega
+expression, so other inputs work too. For example, with a radio button
+`alt.param(name="emphasis", value="cell", bind=alt.binding_radio(options=["cell", "egg"]))`
+declared on the chart, one rule with `"when": "emphasis == 'cell'"` and
+another with `"when": "emphasis == 'egg'"` switch the emphasis between two
+groups of strains.
+
 ### Color the tree
 
 Pass `color_tree_by` to color the tree's branches and tip circles by

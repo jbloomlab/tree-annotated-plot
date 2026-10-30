@@ -131,6 +131,17 @@ def strain_plot_order(viruses_subset: pd.DataFrame) -> list[str]:
     return sorted_df["virus"].tolist()
 
 
+def vaccine_axis_labels(viruses: pd.DataFrame, subtype: str) -> list[str]:
+    """Axis labels of the `RECENT_VACCINE_STRAINS` in `subtype`, in table order.
+
+    These are the strain-axis values the chart (and so the tree's tips) use for
+    the vaccine strains, e.g. for `strain_label_styles`."""
+    is_vaccine = (viruses["subtype"] == subtype) & viruses["virus"].isin(
+        RECENT_VACCINE_STRAINS
+    )
+    return viruses.loc[is_vaccine, "axis_label"].tolist()
+
+
 def make_chart(
     subtype: str,
     chart_type: str,
