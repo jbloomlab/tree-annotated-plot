@@ -161,6 +161,28 @@ class PlotConfig:
         "when `connect_leader_to_label` is on.",
     ] = "normal"
 
+    strain_label_styles: Annotated[
+        list[dict[str, Any]] | None,
+        "Style a subset of the strain labels rendered in the tree panel; "
+        "requires `connect_leader_to_label`. A list of rules, each a dict "
+        'with keys "strains" (a list of tip identifiers, i.e. '
+        '`tree_strain_field` values), "style" and, optionally, "when". '
+        '"style" holds Vega-Lite text-mark properties: "fill" (a color), '
+        '"opacity" (0 to 1), "fontWeight" ("normal", "bold", or 100-900) '
+        'and "fontStyle" ("normal" or "italic"). "when" is a Vega '
+        "expression that turns the rule on while it is truthy, usually just "
+        "the name of a parameter declared in the chart (e.g. one bound to a "
+        "checkbox), but any expression works (e.g. \"emphasis == 'cell'\" "
+        'for a radio button). Without "when" the style always applies. '
+        "Where rules overlap, later rules win property by property; "
+        "properties no rule sets keep `strain_label_font_weight` and the "
+        "default black, upright text. A strain that isn't a tree tip is an "
+        "error; strains dropped by `prune_tree_to_chart` are skipped. CLI "
+        "form: a JSON array (quote the whole argument), e.g. "
+        '\'[{"strains": ["K"], "style": {"fill": "#d62728", '
+        '"fontWeight": "bold"}, "when": "vaccine_strains"}]\'.',
+    ] = None
+
     shift_tree_loc: Annotated[
         int,
         "Pixels by which to shift the tree toward (positive) or away from "
@@ -225,10 +247,25 @@ class PlotConfig:
 
 
 # Sidecar for Python-docstring-only prose, keyed by PlotConfig field name.
-# Empty by default — add an entry when a field's docstring entry needs more
-# than the CLI `--help` text covers. The extras are appended to the field's
-# description in `tree_annotated_plot.plot.__doc__`, never in CLI --help.
-PARAM_DOC_EXTRAS: dict[str, str] = {}
+# Add an entry when a field's docstring entry needs more than the CLI
+# `--help` text covers. The extras are appended to the field's description in
+# `tree_annotated_plot.plot.__doc__`, never in CLI --help.
+PARAM_DOC_EXTRAS: dict[str, str] = {
+    "strain_label_styles": (
+        'In Python, "when" may also be an `altair.Parameter`, e.g. '
+        '`alt.param(name="vaccine_strains", value=True, '
+        "bind=alt.binding_checkbox())`, which is declared on the returned "
+        "chart if your chart doesn't already declare it; or an altair "
+        'parameter expression such as `emphasis == "cell"`. Only a bare '
+        "`altair.Parameter` is declared for you: parameters that an "
+        "expression refers to must be declared on the chart, and an "
+        "expression other than a bare name isn't checked until the chart "
+        "renders. A bare name or parameter must be a variable parameter: "
+        "selection parameters are rejected, since the label data doesn't "
+        "carry the fields a selection tests. Any iterable of strings (e.g. "
+        'a pandas Series) works for "strains".'
+    ),
+}
 
 
 # Descriptions for the three data-input parameters. These can't live on

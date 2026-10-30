@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import altair as alt
 import pandas as pd
 import pytest
+import vl_convert as vlc
 
+import tree_annotated_plot
 from tree_annotated_plot import _tree
 from tree_annotated_plot._plot import (
     _extract_spec_from_html,
@@ -140,6 +143,111 @@ def test_html_extraction_takes_first_when_multiple_blocks(tmp_path: Path) -> Non
     )
     extracted = _extract_spec_from_html(multi)
     assert extracted == {"a": 1}
+
+
+# ---------- selection params keep their `views` through spec loading ----------
+
+
+def _four_tip_auspice() -> dict:
+    return {
+        "version": "v2",
+        "meta": {},
+        "tree": {
+            "name": "ROOT",
+            "node_attrs": {"div": 0.0},
+            "children": [
+                {"name": s, "node_attrs": {"div": 0.01 * (i + 1)}}
+                for i, s in enumerate("ABCD")
+            ],
+        },
+    }
+
+
+def _selection_chart(shape: str) -> alt.TopLevelMixin:
+    """A compound chart of the given `shape` carrying a point selection."""
+    df = pd.DataFrame(
+        {
+            "strain": list("ABCD"),
+            "titer": [1.0, 2.0, 4.0, 8.0],
+            "grp": ["a", "b", "a", "b"],
+        }
+    )
+    sel = alt.selection_point(name="sel", fields=["strain"], empty=False)
+    base = (
+        alt.Chart(df).encode(y="strain:N", x="titer:Q").properties(height=alt.Step(15))
+    )
+    points = base.mark_point().add_params(sel)
+    if shape == "layer":
+        return alt.layer(points, base.mark_tick())
+    if shape == "facet":
+        return points.facet(column="grp:N")
+    if shape == "facet(layer)":
+        return alt.layer(points, base.mark_tick()).facet(column="grp:N")
+    if shape == "vconcat":
+        legend_sel = alt.selection_point(
+            name="legend_sel", fields=["grp"], bind="legend"
+        )
+        return alt.vconcat(
+            points.facet(column="grp:N"),
+            base.mark_point().encode(color="grp:N").add_params(legend_sel),
+        )
+    if shape == "hconcat":
+        return alt.hconcat(points, base.mark_tick())
+    raise ValueError(shape)
+
+
+def _unit_view_names(spec: Any) -> set[str]:
+    names: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if "mark" in node and isinstance(node.get("name"), str):
+                names.add(node["name"])
+            for k, v in node.items():
+                if k not in ("data", "datasets"):
+                    walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(spec)
+    return names
+
+
+@pytest.mark.parametrize("as_path", [False, True], ids=["dict", "json_path"])
+@pytest.mark.parametrize(
+    "shape", ["layer", "facet", "facet(layer)", "vconcat", "hconcat"]
+)
+def test_selection_params_keep_views_through_spec_loading(
+    tmp_path: Path, shape: str, as_path: bool
+) -> None:
+    """A chart loaded from a spec must keep each selection param's `views`.
+
+    The loader once stripped them, which left `views: []` on the combined
+    chart; Vega-Lite then defines the selection in every view and rendering
+    fails with "Duplicate signal name". This is the path every CLI call takes.
+    """
+    chart = _selection_chart(shape)
+    if as_path:
+        source: Any = tmp_path / "chart.json"
+        chart.save(str(source))
+    else:
+        source = chart.to_dict()
+    out = tree_annotated_plot.plot(
+        _four_tip_auspice(),
+        source,
+        chart_strain_field="strain",
+        tree_strain_field="name",
+        branch_length="div",
+    )
+    spec = out.to_dict()
+    selections = [p for p in spec.get("params", []) if "select" in p]
+    assert selections
+    view_names = _unit_view_names(spec)
+    for p in selections:
+        assert p.get("views"), f"selection {p['name']!r} lost its views"
+        assert set(p["views"]) <= view_names
+    vlc.vegalite_to_svg(spec)
 
 
 # ---------- Vega-Lite $schema version check ----------

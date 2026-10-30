@@ -15,7 +15,7 @@ from typing import Any, Literal
 import altair as alt
 import pandas as pd
 
-from . import _color, _config, _tree
+from . import _color, _config, _label_style, _tree
 from ._config import PlotConfig, TreeLocation
 
 # Vega-Lite `orient` values that anchor the legend to the chart's left or
@@ -61,6 +61,7 @@ def plot(
     connect_leader_to_label: bool = False,
     strain_label_font_size: float = 10.0,
     strain_label_font_weight: Literal["normal", "bold"] = "normal",
+    strain_label_styles: list[dict[str, Any]] | None = None,
     shift_tree_loc: int = 0,
     color_tree_by: str | None = None,
     tree_color_scale: dict[str, str] | None = None,
@@ -90,6 +91,7 @@ def plot(
             connect_leader_to_label=connect_leader_to_label,
             strain_label_font_size=strain_label_font_size,
             strain_label_font_weight=strain_label_font_weight,
+            strain_label_styles=strain_label_styles,
             shift_tree_loc=shift_tree_loc,
             color_tree_by=color_tree_by,
             tree_color_scale=tree_color_scale,
@@ -124,10 +126,12 @@ _PLOT_DOC_FOOTER = """
 Returns
 -------
 altair.HConcatChart | altair.VConcatChart
-    For vertical layout (chart strain on `y`), an `HConcatChart` with the
-    tree on the left and the user's chart on the right. For horizontal
-    layout (chart strain on `x`), a `VConcatChart` with the tree on top
-    and the chart below.
+    For vertical layout (chart strain on `y`), an `HConcatChart` whose
+    panels are the tree then the chart for `tree_location="left"` (the
+    default), or the chart then the tree for `"right"`. For horizontal
+    layout (chart strain on `x`), a `VConcatChart` whose panels are the
+    chart then the tree for `tree_location="bottom"` (the default), or the
+    tree then the chart for `"top"`.
 """
 
 
@@ -149,6 +153,14 @@ def _build(
     set on a config object); `config` carries every styling / behavior
     knob. Both surfaces converge here so they can never disagree.
     """
+    if config.strain_label_styles and not config.connect_leader_to_label:
+        raise ValueError(
+            "strain_label_styles styles the strain labels rendered in the "
+            "tree panel, which exist only when connect_leader_to_label=True. "
+            "With it off, the strain labels are your chart's own axis labels; "
+            "style those with Vega-Lite's conditional axis-label properties "
+            "(e.g. labelColor / labelFontWeight expressions on datum.value)."
+        )
     root, auspice_meta = _ensure_tree(
         tree,
         config.tree_strain_field,
@@ -157,6 +169,9 @@ def _build(
     )
     tip_list = _tree.layout(root)
     tip_names = [t.name for t in tip_list]
+    # Kept for `strain_label_styles` validation: a styled strain must be a tip
+    # of the input tree even if `prune_tree_to_chart` later drops it.
+    input_tip_names = list(tip_names)
 
     _check_no_duplicate_tip_strains(
         tip_names, tree_strain_field=config.tree_strain_field
@@ -208,6 +223,14 @@ def _build(
         tip_list = _tree.layout(root)
         tip_names = [t.name for t in tip_list]
 
+    label_style_rules, label_style_params = _label_style.resolve_rules(
+        config.strain_label_styles,
+        input_tip_names=input_tip_names,
+        drawn_tip_names=tip_names,
+        chart_spec=spec,
+        tree_strain_field=config.tree_strain_field,
+    )
+
     strain_dim = _coerce_dim(
         _chart_strain_dim(spec, axis_hits, axis), n_tips=len(tip_names)
     )
@@ -242,6 +265,7 @@ def _build(
         connect_leader_to_label=config.connect_leader_to_label,
         strain_label_font_size=config.strain_label_font_size,
         strain_label_font_weight=config.strain_label_font_weight,
+        label_style_rules=label_style_rules,
         shift_tree_loc=config.shift_tree_loc,
         tip_names=tip_names,
         color_mapping=color_mapping,
@@ -291,6 +315,15 @@ def _build(
     _apply_combined_config(combined, hoisted_config)
     for k, v in hoisted_other.items():
         combined._kwds[k] = v
+    # Declare any `when` parameter the user's chart doesn't already declare.
+    # Appended to the top-level `params` directly: `combined.add_params(...)`
+    # pushes params down into each sub-chart instead, which raises on charts
+    # loaded from a spec (e.g. a `FacetSpec` has no `add_params`).
+    if label_style_params:
+        existing = _live_attr(combined, "params") or []
+        combined._kwds["params"] = list(existing) + [
+            p.param for p in label_style_params
+        ]
     return combined
 
 
@@ -390,9 +423,15 @@ def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLeve
     A live `alt.TopLevelMixin` is returned as-is — its `$schema` is
     irrelevant since the constructing altair version is necessarily the
     running altair version. For dict / JSON path / HTML path inputs we run
-    the Vega-Lite version check (under `strict_version`), strip altair's
-    `params[].views` round-trip annotations, and then dispatch to the right
-    chart subclass via `alt.Chart.from_dict(...)`.
+    the Vega-Lite version check (under `strict_version`) and then dispatch to
+    the right chart subclass via `alt.Chart.from_dict(...)`.
+
+    The spec goes to `from_dict` unmodified. In particular, each selection
+    param's `views` must survive: when `_build` nests a compound chart (layer
+    / facet / concat), altair keeps its params' existing `views`, and an
+    emptied list makes Vega-Lite define the selection in every view, which
+    fails with "Duplicate signal name". `views` is valid on top-level params,
+    which is the only place altair emits it.
     """
     if isinstance(chart_input, alt.TopLevelMixin):
         return chart_input
@@ -420,8 +459,9 @@ def _load_chart(chart_input: ChartInput, *, strict_version: bool) -> alt.TopLeve
         )
 
     _check_chart_schema_version(spec, strict_version=strict_version)
+    # `from_dict` keeps references into the spec (e.g. the `datasets` row
+    # lists), so copy it to keep the caller's dict out of later mutation.
     spec = copy.deepcopy(spec)
-    _strip_params_views(spec)
     # `from_dict` with validate=True dispatches to the right subclass
     # (Chart / LayerChart / FacetChart / HConcatChart / VConcatChart /
     # ConcatChart) based on the spec's shape.
@@ -483,26 +523,6 @@ def _check_chart_schema_version(spec: dict, *, strict_version: bool) -> None:
             "file an issue.",
             stacklevel=3,
         )
-
-
-def _strip_params_views(spec: Any) -> None:
-    """Recursively delete `views` from every params[] entry.
-
-    altair's `to_dict()` annotates each selection-param with the views it's
-    bound to, but altair's own `from_dict()` validation rejects the field.
-    Stripping is safe: the renderer rebinds params to views on its own.
-    """
-    if isinstance(spec, dict):
-        params = spec.get("params")
-        if isinstance(params, list):
-            for p in params:
-                if isinstance(p, dict):
-                    p.pop("views", None)
-        for v in spec.values():
-            _strip_params_views(v)
-    elif isinstance(spec, list):
-        for item in spec:
-            _strip_params_views(item)
 
 
 class _ScriptCollector(HTMLParser):
@@ -1508,6 +1528,7 @@ def _build_tree_chart(
     connect_leader_to_label: bool = False,
     strain_label_font_size: float = 10.0,
     strain_label_font_weight: str = "normal",
+    label_style_rules: list[_label_style.LabelStyleRule] | None = None,
     shift_tree_loc: int = 0,
     tip_names: list[str] | None = None,
     color_mapping: _color.ColorMapping | None = None,
@@ -1613,6 +1634,10 @@ def _build_tree_chart(
     #     text — and masks the dashed leader behind each label without any
     #     width estimation. Vega-Lite doesn't expose `paintOrder`, so the
     #     two-layer trick stands in for a single text-with-halo mark.
+    #   - `strain_label_styles` rules restyle individual labels by replacing
+    #     these layers' mark properties with per-label `datum` expressions
+    #     (see `_label_style`); the halo follows the glyph-shape ones
+    #     (fontWeight / fontStyle) so it keeps matching the text.
     #   - `shift_tree_loc` (pixels) shrinks the strip — bringing the tree
     #     visually closer to the labels — by reducing the data-units between
     #     branch_max and chart_edge_branch. The tree's tree_size-pixel
@@ -1620,6 +1645,23 @@ def _build_tree_chart(
     # When connect_leader_to_label is off, the chart's natural strain-axis
     # labels are kept and leaders stop at branch_max (the prior behavior).
     halo_px = max(2.0, strain_label_font_size * _LABEL_HALO_RATIO)
+    halo_style, text_style = _label_style.mark_props(
+        label_style_rules or [], default_font_weight=strain_label_font_weight
+    )
+    label_font_kwargs = {
+        "baseline": "middle",
+        "fontSize": strain_label_font_size,
+        "fontWeight": strain_label_font_weight,
+    }
+    label_halo_mark_kwargs = {
+        **label_font_kwargs,
+        "fill": "white",
+        "stroke": "white",
+        "strokeWidth": halo_px,
+        "strokeJoin": "round",
+        **halo_style,
+    }
+    label_text_mark_kwargs = {**label_font_kwargs, **text_style}
     if connect_leader_to_label:
         names = tip_names if tip_names is not None else list(tips_df["name"])
         max_name_len = max((len(n) for n in names), default=0)
@@ -1653,6 +1695,12 @@ def _build_tree_chart(
         tips_df = tips_df.assign(x_label=label_anchor_branch)
         leader_df = tips_df[tips_df["x"] < label_anchor_branch].assign(
             x2=label_anchor_branch
+        )
+        tips_df = tips_df.assign(
+            **{
+                _label_style.membership_column(i): tips_df["name"].isin(rule.strains)
+                for i, rule in enumerate(label_style_rules or [])
+            }
         )
         extended_tree_size = tree_size + strip_pixel_width
     else:
@@ -1769,26 +1817,12 @@ def _build_tree_chart(
             )
             layers.append(
                 alt.Chart(tips_df)
-                .mark_text(
-                    align=text_align,
-                    baseline="middle",
-                    fontSize=strain_label_font_size,
-                    fontWeight=strain_label_font_weight,
-                    fill="white",
-                    stroke="white",
-                    strokeWidth=halo_px,
-                    strokeJoin="round",
-                )
+                .mark_text(align=text_align, **label_halo_mark_kwargs)
                 .encode(**label_text_enc)
             )
             layers.append(
                 alt.Chart(tips_df)
-                .mark_text(
-                    align=text_align,
-                    baseline="middle",
-                    fontSize=strain_label_font_size,
-                    fontWeight=strain_label_font_weight,
-                )
+                .mark_text(align=text_align, **label_text_mark_kwargs)
                 .encode(**label_text_enc)
             )
         if scale_bar_layer is not None:
@@ -1875,28 +1909,12 @@ def _build_tree_chart(
             )
             layers.append(
                 alt.Chart(tips_df)
-                .mark_text(
-                    align=text_align,
-                    baseline="middle",
-                    angle=270,
-                    fontSize=strain_label_font_size,
-                    fontWeight=strain_label_font_weight,
-                    fill="white",
-                    stroke="white",
-                    strokeWidth=halo_px,
-                    strokeJoin="round",
-                )
+                .mark_text(align=text_align, angle=270, **label_halo_mark_kwargs)
                 .encode(**label_text_enc)
             )
             layers.append(
                 alt.Chart(tips_df)
-                .mark_text(
-                    align=text_align,
-                    baseline="middle",
-                    angle=270,
-                    fontSize=strain_label_font_size,
-                    fontWeight=strain_label_font_weight,
-                )
+                .mark_text(align=text_align, angle=270, **label_text_mark_kwargs)
                 .encode(**label_text_enc)
             )
         if scale_bar_layer is not None:

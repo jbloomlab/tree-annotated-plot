@@ -74,19 +74,26 @@ class _ColorScaleParamType(click.ParamType):
 _COLOR_SCALE_PARAM_TYPE = _ColorScaleParamType()
 
 
-class _JsonDictParamType(click.ParamType):
-    """Parse a JSON-object string into a dict.
+class _JsonParamType(click.ParamType):
+    """Parse a JSON string into a dict, or into a list of dicts.
 
-    Used for ``--tree-color-legend-format``: any subset of Vega-Lite's
-    Legend properties as a JSON object (e.g.
-    ``'{"orient":"left","labelFontSize":13}'``). The user must quote the
-    whole argument so the shell doesn't interpret braces or quotes.
+    `container=dict` expects a JSON object; used for
+    ``--tree-color-legend-format``: any subset of Vega-Lite's Legend
+    properties (e.g. ``'{"orient":"left","labelFontSize":13}'``).
+    `container=list` expects a JSON array of objects; used for
+    ``--strain-label-styles`` (e.g.
+    ``'[{"strains":["K"],"style":{"fill":"red"}}]'``). The user must quote
+    the whole argument so the shell doesn't interpret braces or quotes.
+    `example` is shown in the error message when the JSON has the wrong shape.
     """
 
-    name = "json_dict"
+    def __init__(self, container: type, *, name: str, example: str) -> None:
+        self.container = container
+        self.name = name
+        self.example = example
 
     def convert(self, value, param, ctx):  # type: ignore[override]
-        if value is None or isinstance(value, dict):
+        if value is None or isinstance(value, self.container):
             return value
         text = str(value).strip()
         if not text:
@@ -95,17 +102,34 @@ class _JsonDictParamType(click.ParamType):
             parsed = json.loads(text)
         except json.JSONDecodeError as exc:
             self.fail(f"invalid JSON: {exc}", param, ctx)
-        if not isinstance(parsed, dict):
+        kind = "object" if self.container is dict else "array of objects"
+        if not isinstance(parsed, self.container):
             self.fail(
-                f'expected a JSON object (e.g. \'{{"orient":"left"}}\'); '
+                f"expected a JSON {kind} (e.g. {self.example}); "
                 f"got {type(parsed).__name__}.",
                 param,
                 ctx,
             )
+        if self.container is list:
+            for i, item in enumerate(parsed):
+                if not isinstance(item, dict):
+                    self.fail(
+                        f"expected a JSON {kind} (e.g. {self.example}); "
+                        f"element {i} is {type(item).__name__}.",
+                        param,
+                        ctx,
+                    )
         return parsed
 
 
-_JSON_DICT_PARAM_TYPE = _JsonDictParamType()
+_JSON_DICT_PARAM_TYPE = _JsonParamType(
+    dict, name="json_dict", example='\'{"orient":"left"}\''
+)
+_JSON_LIST_PARAM_TYPE = _JsonParamType(
+    list,
+    name="json_list",
+    example='\'[{"strains":["K"],"style":{"fill":"red"}}]\'',
+)
 
 
 def _is_str_dict(tp: Any) -> bool:
@@ -123,6 +147,14 @@ def _is_dict_any(tp: Any) -> bool:
     if get_origin(tp) is dict:
         args = get_args(tp)
         return args == (str, Any) or args == ()
+    return False
+
+
+def _is_list_of_dicts(tp: Any) -> bool:
+    """Return True for `list[dict[str, Any]]`."""
+    if get_origin(tp) is list:
+        args = get_args(tp)
+        return len(args) == 1 and _is_dict_any(args[0])
     return False
 
 
@@ -188,6 +220,16 @@ def _option_for_field(field: dataclasses.Field, hints: dict) -> Any:
             show_default=False,
         )
 
+    # list[dict[str, Any]] (with or without `| None`) → JSON-array parser.
+    if _is_list_of_dicts(real_type):
+        return click.option(
+            cli_name,
+            type=_JSON_LIST_PARAM_TYPE,
+            default=field.default if has_default else None,
+            help=description,
+            show_default=False,
+        )
+
     # Optional / Union — unwrap to the non-None branch.
     origin = get_origin(real_type)
     if origin in (typing.Union, types.UnionType):
@@ -206,6 +248,14 @@ def _option_for_field(field: dataclasses.Field, hints: dict) -> Any:
                 return click.option(
                     cli_name,
                     type=_JSON_DICT_PARAM_TYPE,
+                    default=field.default if has_default else None,
+                    help=description,
+                    show_default=False,
+                )
+            if _is_list_of_dicts(inner):
+                return click.option(
+                    cli_name,
+                    type=_JSON_LIST_PARAM_TYPE,
                     default=field.default if has_default else None,
                     help=description,
                     show_default=False,
