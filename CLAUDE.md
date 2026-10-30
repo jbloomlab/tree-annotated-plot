@@ -7,7 +7,9 @@
   section as you make them — new parameters, behavior changes, removed
   features, bug fixes — in [Keep a Changelog](https://keepachangelog.com/)
   format. At release time, `## [Unreleased]` is renamed to
-  `## [X.Y.Z] - YYYY-MM-DD` and a fresh `## [Unreleased]` is created.
+  `## [X.Y.Z] - YYYY-MM-DD`, with no empty `## [Unreleased]` left above it.
+  When the next change lands and there's no `## [Unreleased]` section, add
+  one at the top.
 - **Single source of truth — `pyproject.toml`**: canonical for dependencies,
   supported Python version, build config, tool settings. Don't restate any of
   these in prose; refer to `pyproject.toml`.
